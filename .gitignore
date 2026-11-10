@@ -16,6 +16,8 @@
 
 # next.js
 /.next/
+/.next-smoke-*/
+/.next-build-check-*/
 /out/
 
 # production

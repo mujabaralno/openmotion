@@ -28,7 +28,8 @@ Buka <http://127.0.0.1:3000>. Aplikasi sengaja terikat ke `127.0.0.1`, jadi tida
 | `npm run start` | Menjalankan hasil build di `127.0.0.1:3000` |
 | `npm run lint` | Menjalankan ESLint |
 | `npm run typecheck` | Memeriksa tipe TypeScript |
-| `npm test` | Menjalankan tes database |
+| `npm test` | Menjalankan seluruh tes unit |
+| `npm run test:security` | Menjalankan tes integrasi keamanan API |
 
 ## Database
 
@@ -55,14 +56,26 @@ npm run render     # render contoh ke out/example.mp4
 
 ```
 src/app/              halaman Next.js (App Router)
+src/app/api/          route handler API
+src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi dan skema SQLite
-tests/                tes database
+src/server/security/  aturan Host/Origin dan token
+tests/                tes unit
+docs/                 catatan arsitektur dan keamanan
 remotion/             proyek Remotion contoh
-data/                 file database (tidak di-commit)
+data/                 database dan token runtime (tidak di-commit)
 ```
 
-## Keamanan dasar
+## Keamanan API
 
-- Server hanya mendengarkan `127.0.0.1`.
-- `.env.local`, folder `data/`, dan hasil render diabaikan oleh Git.
-- Jangan menaruh kunci API atau isi database di dalam commit.
+Semua rute `/api/*` melewati guard yang sama:
+
+- Hanya Host `127.0.0.1:<port>` dan `localhost:<port>` yang diterima.
+- Origin harus asal aplikasi sendiri; permintaan lintas situs ditolak.
+- `GET`/`HEAD` boleh tanpa Origin; `POST`/`PUT`/`PATCH`/`DELETE` wajib Origin dan token.
+- Token acak dibuat ulang setiap server start, disimpan di `data/runtime/server-token`, dan dikirim ke UI lewat cookie `HttpOnly` + `SameSite=Strict`.
+- UI memanggil `GET /api/security/session` saat dimuat untuk mendapatkan cookie tersebut.
+
+Selengkapnya, termasuk cara menambah API baru dan cara menjalankan tes: [`docs/security.md`](docs/security.md).
+
+Jika memakai port selain `3000`, set `APP_PORT` di `.env.local` agar Host/Origin yang sah ikut menyesuaikan.
