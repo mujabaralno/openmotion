@@ -23,5 +23,10 @@ export async function register() {
         console.error("[workspace] gagal diinisialisasi:", error);
       }
     }
+
+    const { installAgentShutdownHandlers } = await import(
+      "./server/agents/registry"
+    );
+    installAgentShutdownHandlers();
   }
 }
