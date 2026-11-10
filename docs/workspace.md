@@ -32,7 +32,7 @@ Setelah mengubah `.env.local`, restart `npm run dev`.
 | `episodes/` | Folder episode; episode dibuat lewat UI (lihat [`episodes.md`](episodes.md)). |
 | `prompts/` | Template prompt; diisi pada M2-1. |
 | `guide/` | Panduan gaya; diisi pada M2-1. |
-| `agents.json` | Contoh konfigurasi agen. |
+| `agents.json` | Contoh konfigurasi agen; format dan validasinya di [`agents-registry.md`](agents-registry.md). |
 
 Yang **tidak** dibuat pada tahap ini: proyek Remotion, isi template prompt, panduan gaya, dan episode. Semua itu dikerjakan pada issue masing-masing.
 

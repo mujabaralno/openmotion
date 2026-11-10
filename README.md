@@ -67,6 +67,12 @@ Pembuatan episode menghasilkan baris database, folder `episodes/<slug>/`, `episo
 
 API tersedia di `GET/POST /api/episodes` dan `GET /api/episodes/<slug>`. Detail alur, aturan slug, format data, dan batasan ada di [`docs/episodes.md`](docs/episodes.md).
 
+## Agent registry
+
+`agents.json` dibaca dari workspace dan divalidasi sebelum agen dijalankan. Registry menjalankan paling banyak satu proses per sesi pada folder episode yang sudah diverifikasi, menyimpan status di `globalThis`, dan membersihkan proses beserta turunannya saat server menerima `SIGINT`/`SIGTERM`.
+
+Format konfigurasi, API registry, status proses, dan cara verifikasi cleanup ada di [`docs/agents-registry.md`](docs/agents-registry.md). Protokol ACP, chat, dan izin menyusul di issue berikutnya.
+
 ## Styling
 
 Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` hanya mengimpor Tailwind; seluruh tampilan UI memakai utility class Tailwind. Nanti bisa dilengkapi komponen shadcn/ui.
@@ -91,6 +97,7 @@ src/app/episodes/     halaman daftar dan detail episode
 src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi, skema, dan migrasi SQLite
 src/server/episodes/  slug, repository, dan service episode
+src/server/agents/    konfigurasi dan registry proses agen
 src/server/security/  aturan Host/Origin dan token
 src/server/workspace/ penjaga path, whitelist, dan inisialisasi workspace
 src/components/       form dan komponen status episode
