@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { WrenchIcon } from "lucide-react";
+import { ShieldAlertIcon, WrenchIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
+import {
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item";
 import { Message, MessageContent } from "@/components/ui/message";
 import {
   MessageScroller,
@@ -23,6 +31,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   Trace,
   TraceDescription,
@@ -35,6 +44,7 @@ import type { AcpUpdate } from "@/server/acp/types";
 import type {
   AgentStreamEvent,
   AgentStreamStatus,
+  PermissionRecord,
 } from "@/server/agent-streams/types";
 import type { StepKind } from "@/server/db";
 
@@ -118,6 +128,29 @@ function traceStatus(
   return undefined;
 }
 
+function permissionStatusLabel(permission: PermissionRecord): string {
+  if (permission.status === "pending") return "Menunggu keputusan";
+  if (permission.status === "approved") {
+    return permission.decisionSource === "auto"
+      ? "Disetujui otomatis"
+      : "Disetujui";
+  }
+  if (permission.status === "rejected") return "Ditolak";
+  if (permission.status === "expired") return "Kedaluwarsa";
+  return "Gagal";
+}
+
+function permissionStatusVariant(
+  permission: PermissionRecord,
+): "default" | "secondary" | "destructive" | "outline" {
+  if (permission.status === "approved") return "default";
+  if (permission.status === "rejected" || permission.status === "failed") {
+    return "destructive";
+  }
+  if (permission.status === "pending") return "outline";
+  return "secondary";
+}
+
 function AgentStreamView({
   episodeSlug,
   kind,
@@ -133,6 +166,12 @@ function AgentStreamView({
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [tools, setTools] = useState<ToolEntry[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [permissions, setPermissions] = useState<
+    Record<string, PermissionRecord>
+  >({});
+  const [autoApprove, setAutoApprove] = useState(false);
+  const [autoPending, setAutoPending] = useState(false);
+  const [deciding, setDeciding] = useState<Record<string, boolean>>({});
 
   const sourceRef = useRef<EventSource | null>(null);
   const seenRef = useRef(new Set<string>());
@@ -153,6 +192,8 @@ function AgentStreamView({
       setAttemptId(nextAttemptId);
       setMessages([]);
       setTools([]);
+      setPermissions({});
+      setAutoApprove(false);
       setError(null);
       setSessionStatus("running");
     };
@@ -245,6 +286,19 @@ function AgentStreamView({
         return;
       }
 
+      if (event.type === "permission") {
+        setPermissions((current) => ({
+          ...current,
+          [event.permission.id]: event.permission,
+        }));
+        return;
+      }
+
+      if (event.type === "permission-mode") {
+        setAutoApprove(event.enabled);
+        return;
+      }
+
       setSessionStatus(event.status);
 
       if (event.error) {
@@ -283,6 +337,7 @@ function AgentStreamView({
       ) {
         terminalRef.current = true;
         setConnection(data.status === "idle" ? "idle" : "done");
+        setAutoApprove(false);
         source.close();
 
         if (sourceRef.current === source) {
@@ -294,6 +349,8 @@ function AgentStreamView({
     source.addEventListener("prompt", handleEvent);
     source.addEventListener("update", handleEvent);
     source.addEventListener("status", handleEvent);
+    source.addEventListener("permission", handleEvent);
+    source.addEventListener("permission-mode", handleEvent);
 
     source.onopen = () => {
       if (!terminalRef.current) setConnection("open");
@@ -318,6 +375,130 @@ function AgentStreamView({
     };
   }, [episodeSlug, kind]);
 
+  async function decidePermission(
+    permissionId: string,
+    decision: "approve" | "reject",
+  ) {
+    setDeciding((current) => ({
+      ...current,
+      [permissionId]: true,
+    }));
+    setError(null);
+
+    try {
+      const security = await fetch("/api/security/session", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (!security.ok) {
+        throw new Error("Sesi keamanan belum siap. Muat ulang halaman.");
+      }
+
+      const response = await fetch(
+        `/api/permissions/${encodeURIComponent(permissionId)}`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ decision }),
+        },
+      );
+
+      const data = (await response.json().catch(() => null)) as
+        | { permission?: PermissionRecord; error?: string }
+        | null;
+
+      if (!response.ok) {
+        setError(data?.error ?? "Gagal memproses keputusan izin.");
+        return;
+      }
+
+      if (data?.permission) {
+        setPermissions((current) => ({
+          ...current,
+          [permissionId]: data.permission as PermissionRecord,
+        }));
+      }
+    } catch (decisionError) {
+      setError(
+        decisionError instanceof Error
+          ? decisionError.message
+          : "Gagal memproses keputusan izin.",
+      );
+    } finally {
+      setDeciding((current) => {
+        const next = { ...current };
+        delete next[permissionId];
+        return next;
+      });
+    }
+  }
+
+  async function toggleAutoApprove() {
+    if (autoPending || sessionStatus !== "running") return;
+
+    setAutoPending(true);
+    setError(null);
+
+    try {
+      const security = await fetch("/api/security/session", {
+        credentials: "same-origin",
+        cache: "no-store",
+      });
+
+      if (!security.ok) {
+        throw new Error("Sesi keamanan belum siap. Muat ulang halaman.");
+      }
+
+      const response = await fetch(
+        `/api/episodes/${encodeURIComponent(episodeSlug)}/steps/${kind}/permissions/auto`,
+        {
+          method: "POST",
+          credentials: "same-origin",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ enabled: !autoApprove }),
+        },
+      );
+
+      const data = (await response.json().catch(() => null)) as
+        | { enabled?: boolean; error?: string }
+        | null;
+
+      if (!response.ok) {
+        setError(data?.error ?? "Gagal mengubah mode izin otomatis.");
+        return;
+      }
+
+      setAutoApprove(Boolean(data?.enabled));
+    } catch (toggleError) {
+      setError(
+        toggleError instanceof Error
+          ? toggleError.message
+          : "Gagal mengubah mode izin otomatis.",
+      );
+    } finally {
+      setAutoPending(false);
+    }
+  }
+
+  const permissionList = Object.values(permissions).sort(
+    (left, right) => {
+      const leftPending = left.status === "pending" ? 0 : 1;
+      const rightPending = right.status === "pending" ? 0 : 1;
+
+      return (
+        leftPending - rightPending ||
+        left.requestedAt.localeCompare(right.requestedAt)
+      );
+    },
+  );
+  const pendingPermissionCount = permissionList.filter(
+    (permission) => permission.status === "pending",
+  ).length;
+  const canToggleAuto =
+    sessionStatus === "running" && Boolean(attemptId);
+
   const showEmptyState =
     messages.length === 0 && tools.length === 0;
 
@@ -331,6 +512,101 @@ function AgentStreamView({
           {SESSION_LABELS[sessionStatus]}
         </Badge>
       </div>
+
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
+        <div className="flex items-start gap-3">
+          <Switch
+            checked={autoApprove}
+            onCheckedChange={() => {
+              void toggleAutoApprove();
+            }}
+            disabled={!canToggleAuto || autoPending}
+            aria-label="Mode izin otomatis"
+          />
+          <div>
+            <p className="text-sm font-medium">Mode izin otomatis</p>
+            <p className="text-xs text-muted-foreground">
+              Berlaku hanya untuk langkah ini. Permintaan yang sudah
+              menunggu tetap membutuhkan keputusan manual.
+            </p>
+          </div>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {autoApprove ? <Badge>Auto-izin aktif</Badge> : null}
+          {pendingPermissionCount > 0 ? (
+            <Badge variant="outline">
+              {pendingPermissionCount} izin menunggu
+            </Badge>
+          ) : null}
+        </div>
+      </div>
+
+      {permissionList.length > 0 ? (
+        <div className="mb-3 grid gap-2">
+          {permissionList.map((permission) => (
+            <Item key={permission.id} variant="outline" size="sm">
+              <ItemMedia variant="icon">
+                <ShieldAlertIcon />
+              </ItemMedia>
+              <ItemContent>
+                <ItemTitle>{permission.title}</ItemTitle>
+                <ItemDescription>{permission.summary}</ItemDescription>
+                {permission.error ? (
+                  <p className="text-xs text-destructive">
+                    {permission.error}
+                  </p>
+                ) : null}
+              </ItemContent>
+              <ItemActions>
+                {permission.status === "pending" &&
+                sessionStatus === "running" ? (
+                  <>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      disabled={Boolean(deciding[permission.id])}
+                      onClick={() => {
+                        void decidePermission(
+                          permission.id,
+                          "reject",
+                        );
+                      }}
+                    >
+                      Tolak
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      disabled={Boolean(deciding[permission.id])}
+                      onClick={() => {
+                        void decidePermission(
+                          permission.id,
+                          "approve",
+                        );
+                      }}
+                    >
+                      Setujui
+                    </Button>
+                  </>
+                ) : (
+                  <Badge
+                    variant={
+                      permission.status === "pending"
+                        ? "secondary"
+                        : permissionStatusVariant(permission)
+                    }
+                  >
+                    {permission.status === "pending"
+                      ? "Sesi tidak aktif"
+                      : permissionStatusLabel(permission)}
+                  </Badge>
+                )}
+              </ItemActions>
+            </Item>
+          ))}
+        </div>
+      ) : null}
 
       {error ? (
         <p

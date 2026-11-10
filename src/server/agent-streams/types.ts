@@ -1,6 +1,36 @@
-import type { AcpUpdate } from "../acp/types.ts";
+import type { AcpPermissionOption, AcpUpdate } from "../acp/types.ts";
+import type { StepKind } from "../db/index.ts";
 
 export type AgentStreamStatus = "idle" | "running" | "completed" | "failed";
+
+export type PermissionStatus =
+  | "pending"
+  | "approved"
+  | "rejected"
+  | "failed"
+  | "expired";
+
+export type PermissionDecisionSource = "manual" | "auto";
+
+export type PermissionRecord = {
+  id: string;
+  attemptId: string;
+  episodeSlug: string;
+  stepKind: StepKind;
+  stepId: number | null;
+  title: string;
+  summary: string;
+  toolCallId?: string;
+  toolKind?: string;
+  options: AcpPermissionOption[];
+  status: PermissionStatus;
+  decision?: "approved" | "rejected";
+  decisionSource?: PermissionDecisionSource;
+  auto: boolean;
+  requestedAt: string;
+  decidedAt?: string;
+  error?: string;
+};
 
 export type AgentStreamStatusEvent = {
   seq: number;
@@ -29,7 +59,25 @@ export type AgentStreamUpdateEvent = {
   at: string;
 };
 
+export type AgentStreamPermissionEvent = {
+  seq: number;
+  attemptId: string;
+  type: "permission";
+  permission: PermissionRecord;
+  at: string;
+};
+
+export type AgentStreamPermissionModeEvent = {
+  seq: number;
+  attemptId: string;
+  type: "permission-mode";
+  enabled: boolean;
+  at: string;
+};
+
 export type AgentStreamEvent =
   | AgentStreamStatusEvent
   | AgentStreamPromptEvent
-  | AgentStreamUpdateEvent;
+  | AgentStreamUpdateEvent
+  | AgentStreamPermissionEvent
+  | AgentStreamPermissionModeEvent;

@@ -5,7 +5,7 @@ import {
 import { STEP_KINDS, type StepKind } from "@/server/db";
 import { AgentStreamError } from "@/server/agent-streams/errors";
 import { startStepStream } from "@/server/agent-streams/manager";
-import { getEpisodeBySlug } from "@/server/episodes/repository";
+import { getEpisodeBySlug, getStepIdByKind } from "@/server/episodes/repository";
 import {
   WorkspaceInitializationError,
 } from "@/server/workspace/init";
@@ -32,6 +32,11 @@ export async function POST(
   const episode = getEpisodeBySlug(slug);
   if (!episode) {
     return json({ error: "Episode tidak ditemukan." }, 404);
+  }
+
+  const stepId = getStepIdByKind(slug, kind as StepKind);
+  if (!stepId) {
+    return json({ error: "Langkah episode tidak ditemukan." }, 404);
   }
 
   let body: unknown;
@@ -80,6 +85,7 @@ export async function POST(
       kind: kind as StepKind,
       agentId: requestedAgentId,
       prompt,
+      stepId,
     });
 
     return json({ attempt }, 201);

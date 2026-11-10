@@ -1,9 +1,16 @@
 import fs from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import type Database from "better-sqlite3";
 import { AcpSession } from "../acp/client.ts";
-import type { AcpUpdate } from "../acp/types.ts";
+import type {
+  AcpPermissionDecision,
+  AcpPermissionOption,
+  AcpPermissionRequest,
+  AcpUpdate,
+} from "../acp/types.ts";
 import {
+  getDb,
   STEP_KINDS,
   type StepKind,
 } from "../db/index.ts";
@@ -12,7 +19,7 @@ import {
 } from "../workspace/init.ts";
 import { resolveWorkspacePath } from "../workspace/paths.ts";
 import { stopAllAgentSessions } from "../agents/registry.ts";
-import { AgentStreamError } from "./errors.ts";
+import { AgentStreamError, PermissionError } from "./errors.ts";
 import {
   appendStepEvent,
   getStepLogPath,
@@ -21,6 +28,7 @@ import {
 import type {
   AgentStreamEvent,
   AgentStreamStatus,
+  PermissionRecord,
 } from "./types.ts";
 
 export type StartStepStreamOptions = {
@@ -29,6 +37,8 @@ export type StartStepStreamOptions = {
   agentId: string;
   prompt: string;
   workspaceRoot?: string;
+  stepId?: number | null;
+  db?: Database.Database;
 };
 
 export type StepStreamInfo = {
@@ -48,6 +58,11 @@ export type StepStreamSubscription = {
 
 type Subscriber = (event: AgentStreamEvent) => void;
 
+type PendingPermission = {
+  record: PermissionRecord;
+  resolve: (decision: AcpPermissionDecision) => void;
+};
+
 type StreamState = {
   attemptId: string;
   episodeSlug: string;
@@ -60,6 +75,10 @@ type StreamState = {
   acp: AcpSession | null;
   logPath: string;
   terminal: boolean;
+  stepId: number | null;
+  db: Database.Database | null;
+  autoApprovePermissions: boolean;
+  pendingPermissions: Map<string, PendingPermission>;
 };
 
 type StreamsState = {
@@ -148,6 +167,10 @@ function emitStatus(
   status: AgentStreamStatus,
   extra: { stopReason?: string; error?: string } = {},
 ): void {
+  if (status !== "running") {
+    expirePendingPermissions(state);
+  }
+
   publish(state, {
     seq: state.seq + 1,
     attemptId: state.attemptId,
@@ -158,6 +181,343 @@ function emitStatus(
     ...extra,
   });
   state.seq += 1;
+}
+
+function emitPermission(
+  state: StreamState,
+  permission: PermissionRecord,
+): void {
+  publish(state, {
+    seq: state.seq + 1,
+    attemptId: state.attemptId,
+    type: "permission",
+    permission,
+    at: new Date().toISOString(),
+  });
+  state.seq += 1;
+}
+
+function emitPermissionMode(
+  state: StreamState,
+  enabled: boolean,
+): void {
+  publish(state, {
+    seq: state.seq + 1,
+    attemptId: state.attemptId,
+    type: "permission-mode",
+    enabled,
+    at: new Date().toISOString(),
+  });
+  state.seq += 1;
+}
+
+function selectPermissionOptions(options: AcpPermissionOption[]): {
+  allow: AcpPermissionOption | undefined;
+  reject: AcpPermissionOption | undefined;
+} {
+  return {
+    allow:
+      options.find((option) => option.kind === "allow_once") ??
+      options.find((option) => option.kind.startsWith("allow")),
+    reject:
+      options.find((option) => option.kind === "reject_once") ??
+      options.find((option) => option.kind.startsWith("reject")),
+  };
+}
+
+function permissionRequestSummary(request: AcpPermissionRequest): {
+  title: string;
+  summary: string;
+} {
+  const title = request.toolCall?.title?.trim() || "Aksi agen";
+  const parts = [title];
+
+  if (request.toolCall?.kind) parts.push(request.toolCall.kind);
+  if (request.toolCall?.toolCallId) {
+    parts.push(request.toolCall.toolCallId);
+  }
+
+  return { title, summary: parts.join(" · ") };
+}
+
+function createPermissionRecord(
+  state: StreamState,
+  request: AcpPermissionRequest,
+): PermissionRecord {
+  const { title, summary } = permissionRequestSummary(request);
+
+  return {
+    id: randomUUID(),
+    attemptId: state.attemptId,
+    episodeSlug: state.episodeSlug,
+    stepKind: state.kind,
+    stepId: state.stepId,
+    title,
+    summary,
+    toolCallId: request.toolCall?.toolCallId,
+    toolKind: request.toolCall?.kind,
+    options: request.options,
+    status: "pending",
+    auto: state.autoApprovePermissions,
+    requestedAt: new Date().toISOString(),
+  };
+}
+
+function persistPermissionDecision(
+  state: StreamState,
+  permission: PermissionRecord,
+  decisionLabel: string,
+): void {
+  if (!state.stepId) {
+    throw new PermissionError(
+      "log-failed",
+      "Langkah untuk permintaan izin tidak diketahui.",
+    );
+  }
+
+  const db = state.db ?? getDb();
+
+  try {
+    db.prepare(
+      "INSERT INTO permission_log (step_id, request_summary, decision, decided_at) VALUES (?, ?, ?, ?)",
+    ).run(
+      state.stepId,
+      permission.summary,
+      decisionLabel,
+      permission.decidedAt ?? new Date().toISOString(),
+    );
+  } catch (error) {
+    throw new PermissionError(
+      "log-failed",
+      `Keputusan izin gagal dicatat: ${errorMessage(error)}`,
+    );
+  }
+}
+
+function completePermission(
+  state: StreamState,
+  pending: PendingPermission,
+  updated: PermissionRecord,
+  decision: AcpPermissionDecision,
+): void {
+  state.pendingPermissions.delete(updated.id);
+  emitPermission(state, updated);
+  pending.resolve(decision);
+}
+
+function expirePendingPermissions(state: StreamState): void {
+  for (const [id, pending] of state.pendingPermissions) {
+    const updated: PermissionRecord = {
+      ...pending.record,
+      status: "expired",
+      decidedAt: new Date().toISOString(),
+      error: "Sesi berakhir sebelum keputusan diberikan.",
+    };
+
+    state.pendingPermissions.delete(id);
+    emitPermission(state, updated);
+    pending.resolve({ outcome: "cancelled" });
+  }
+}
+
+function autoPermissionDecision(
+  state: StreamState,
+  record: PermissionRecord,
+): AcpPermissionDecision {
+  const { allow, reject } = selectPermissionOptions(record.options);
+  const decidedAt = new Date().toISOString();
+
+  if (!allow) {
+    emitPermission(state, {
+      ...record,
+      status: "failed",
+      decidedAt,
+      error: "Agen tidak menawarkan opsi persetujuan.",
+    });
+
+    return reject
+      ? { outcome: "selected", optionId: reject.optionId }
+      : { outcome: "cancelled" };
+  }
+
+  const updated: PermissionRecord = {
+    ...record,
+    status: "approved",
+    decision: "approved",
+    decisionSource: "auto",
+    decidedAt,
+  };
+
+  try {
+    persistPermissionDecision(state, updated, "approved_auto");
+  } catch (error) {
+    emitPermission(state, {
+      ...updated,
+      status: "failed",
+      error: errorMessage(error),
+    });
+
+    return reject
+      ? { outcome: "selected", optionId: reject.optionId }
+      : { outcome: "cancelled" };
+  }
+
+  emitPermission(state, updated);
+
+  return { outcome: "selected", optionId: allow.optionId };
+}
+
+function requestPermission(
+  state: StreamState,
+  request: AcpPermissionRequest,
+): Promise<AcpPermissionDecision> {
+  if (state.terminal) {
+    return Promise.resolve({ outcome: "cancelled" });
+  }
+
+  const record = createPermissionRecord(state, request);
+
+  if (state.autoApprovePermissions) {
+    return Promise.resolve(autoPermissionDecision(state, record));
+  }
+
+  return new Promise<AcpPermissionDecision>((resolve) => {
+    state.pendingPermissions.set(record.id, { record, resolve });
+    emitPermission(state, record);
+  });
+}
+
+export async function decidePermission(
+  permissionId: string,
+  decision: "approve" | "reject",
+): Promise<PermissionRecord> {
+  if (decision !== "approve" && decision !== "reject") {
+    throw new PermissionError(
+      "invalid-decision",
+      "Keputusan harus approve atau reject.",
+    );
+  }
+
+  const streams = getStreamsState();
+  let state: StreamState | null = null;
+  let pending: PendingPermission | null = null;
+
+  for (const candidate of streams.streams.values()) {
+    const entry = candidate.pendingPermissions.get(permissionId);
+    if (entry) {
+      state = candidate;
+      pending = entry;
+      break;
+    }
+  }
+
+  if (!state || !pending) {
+    throw new PermissionError(
+      "not-found",
+      "Permintaan izin tidak ditemukan atau sudah diputuskan.",
+    );
+  }
+
+  if (state.terminal) {
+    state.pendingPermissions.delete(permissionId);
+    throw new PermissionError(
+      "not-pending",
+      "Sesi sudah berakhir; izin tidak dapat diputuskan.",
+    );
+  }
+
+  const { allow, reject } = selectPermissionOptions(
+    pending.record.options,
+  );
+  const approved = decision === "approve";
+  const decidedAt = new Date().toISOString();
+
+  if (approved && !allow) {
+    const updated: PermissionRecord = {
+      ...pending.record,
+      status: "failed",
+      decidedAt,
+      error: "Agen tidak menawarkan opsi persetujuan.",
+    };
+    completePermission(
+      state,
+      pending,
+      updated,
+      reject
+        ? { outcome: "selected", optionId: reject.optionId }
+        : { outcome: "cancelled" },
+    );
+    throw new PermissionError(
+      "not-pending",
+      "Agen tidak menawarkan opsi persetujuan.",
+    );
+  }
+
+  const updated: PermissionRecord = {
+    ...pending.record,
+    status: approved ? "approved" : "rejected",
+    decision: approved ? "approved" : "rejected",
+    decisionSource: "manual",
+    decidedAt,
+  };
+  const decisionLabel = approved ? "approved" : "rejected";
+  const outcome: AcpPermissionDecision = approved
+    ? { outcome: "selected", optionId: allow!.optionId }
+    : reject
+      ? { outcome: "selected", optionId: reject.optionId }
+      : { outcome: "cancelled" };
+
+  try {
+    persistPermissionDecision(state, updated, decisionLabel);
+  } catch (error) {
+    const failed: PermissionRecord = {
+      ...updated,
+      status: "failed",
+      error: errorMessage(error),
+    };
+    completePermission(
+      state,
+      pending,
+      failed,
+      reject
+        ? { outcome: "selected", optionId: reject.optionId }
+        : { outcome: "cancelled" },
+    );
+    throw error;
+  }
+
+  completePermission(state, pending, updated, outcome);
+
+  return updated;
+}
+
+export function setAutoApprovePermissions(
+  episodeSlug: string,
+  kind: StepKind,
+  enabled: boolean,
+): { attemptId: string; enabled: boolean } {
+  if (typeof enabled !== "boolean") {
+    throw new PermissionError(
+      "invalid-decision",
+      "Nilai mode otomatis harus boolean.",
+    );
+  }
+
+  const state = getStreamsState().streams.get(
+    streamKey(episodeSlug, kind),
+  );
+
+  if (!state || state.terminal) {
+    throw new PermissionError(
+      "no-active-session",
+      "Tidak ada sesi aktif untuk langkah ini.",
+    );
+  }
+
+  state.autoApprovePermissions = enabled;
+  emitPermissionMode(state, enabled);
+
+  return { attemptId: state.attemptId, enabled };
 }
 
 function terminalEventOf(
@@ -171,6 +531,20 @@ function terminalEventOf(
   }
 
   return null;
+}
+
+function latestPermissionRecords(
+  events: AgentStreamEvent[],
+): PermissionRecord[] {
+  const records = new Map<string, PermissionRecord>();
+
+  for (const event of events) {
+    if (event.type === "permission") {
+      records.set(event.permission.id, event.permission);
+    }
+  }
+
+  return Array.from(records.values());
 }
 
 function replayEvents(
@@ -307,6 +681,10 @@ export async function startStepStream(
     acp: null,
     logPath,
     terminal: false,
+    stepId: options.stepId ?? null,
+    db: options.db ?? null,
+    autoApprovePermissions: false,
+    pendingPermissions: new Map(),
   };
 
   state.streams.set(key, stream);
@@ -320,6 +698,8 @@ export async function startStepStream(
     episodeSlug: options.episodeSlug,
     workspaceRoot,
     onUpdate: (update) => emitUpdate(stream, update),
+    onPermissionRequest: (request) =>
+      requestPermission(stream, request),
   });
 
   stream.acp = acp;
@@ -427,13 +807,38 @@ export function subscribeStepStream(options: {
   let terminal = terminalEventOf(events);
 
   if (!terminal) {
-    const last = events[events.length - 1];
+    let nextSeq = events[events.length - 1]?.seq ?? 0;
+    const now = new Date().toISOString();
+
+    for (const permission of latestPermissionRecords(events)) {
+      if (permission.status !== "pending") continue;
+
+      nextSeq += 1;
+      events = [
+        ...events,
+        {
+          seq: nextSeq,
+          attemptId: history.attemptId,
+          type: "permission",
+          permission: {
+            ...permission,
+            status: "expired",
+            decidedAt: now,
+            error:
+              "Sesi tidak aktif. Izin tidak dapat diputuskan lagi.",
+          },
+          at: now,
+        },
+      ];
+    }
+
+    nextSeq += 1;
     const failed: AgentStreamEvent = {
-      seq: (last?.seq ?? 0) + 1,
+      seq: nextSeq,
       attemptId: history.attemptId,
       type: "status",
       status: "failed",
-      at: new Date().toISOString(),
+      at: now,
       error:
         "Sesi tidak aktif. Server mungkin sudah dimulai ulang; prompt tidak dikirim ulang.",
     };
