@@ -60,6 +60,7 @@ src/app/api/          route handler API
 src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi dan skema SQLite
 src/server/security/  aturan Host/Origin dan token
+src/server/workspace/ penjaga path dan whitelist file workspace
 tests/                tes unit
 docs/                 catatan arsitektur dan keamanan
 remotion/             proyek Remotion contoh
@@ -79,3 +80,14 @@ Semua rute `/api/*` melewati guard yang sama:
 Selengkapnya, termasuk cara menambah API baru dan cara menjalankan tes: [`docs/security.md`](docs/security.md).
 
 Jika memakai port selain `3000`, set `APP_PORT` di `.env.local` agar Host/Origin yang sah ikut menyesuaikan.
+
+## Penjaga path workspace
+
+Akses file memakai `src/server/workspace/paths.ts`:
+
+- `workspaceRoot` ditentukan aplikasi, bukan input pengguna.
+- Hanya nama file yang ada di daftar putih yang diterima.
+- Path absolut, `..`, separator folder, dan slug episode yang mencurigakan ditolak.
+- Symlink pada file atau folder perantara ditolak, termasuk untuk file baru.
+
+Daftar putih per area, aturan lengkap, dan contoh penggunaan ada di [`docs/workspace-paths.md`](docs/workspace-paths.md).
