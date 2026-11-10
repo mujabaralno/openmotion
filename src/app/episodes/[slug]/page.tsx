@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AgentChatPanel } from "@/components/agent-chat-panel";
 import { EpisodeSteps } from "@/components/episode-steps";
 import { getEpisodeBySlug } from "@/server/episodes/repository";
 
@@ -89,6 +90,8 @@ export default async function EpisodeDetailPage({
         </div>
         <EpisodeSteps steps={episode.steps} />
       </section>
+
+      <AgentChatPanel episodeSlug={episode.slug} />
     </main>
   );
 }

@@ -30,6 +30,7 @@ Buka <http://127.0.0.1:3000>. Aplikasi sengaja terikat ke `127.0.0.1`, jadi tida
 | `npm run typecheck` | Memeriksa tipe TypeScript |
 | `npm test` | Menjalankan seluruh tes unit |
 | `npm run test:security` | Menjalankan tes integrasi keamanan API |
+| `npm run test:stream` | Menjalankan tes integrasi streaming SSE |
 
 ## Database
 
@@ -79,9 +80,15 @@ Klien ACP menghubungkan registry ke proses agen lewat stdio: `initialize`, `sess
 
 Detail API, timeout, penanganan error, dan hasil uji manual dengan CommandCode ada di [`docs/acp-client.md`](docs/acp-client.md).
 
+## Streaming chat
+
+Halaman detail episode memiliki panel chat agen dengan SSE. Teks, aktivitas tool, dan status sesi tampil bertahap; riwayat minimum disimpan di `logs/<kind>.jsonl`. Refresh dan reconnect memulihkan riwayat tanpa menjalankan agen baru.
+
+Panel memakai komponen shadcn/ui dan pola AI Elements (`MessageScroller`, `Message`, `Bubble`, `Marker`, `Trace`). Detail rute, format event, reconnect, dan pengujian ada di [`docs/streaming.md`](docs/streaming.md).
+
 ## Styling
 
-Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` hanya mengimpor Tailwind; seluruh tampilan UI memakai utility class Tailwind. Nanti bisa dilengkapi komponen shadcn/ui.
+Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` mengimpor Tailwind dan tema shadcn/ui; seluruh tampilan memakai utility Tailwind. Komponen shadcn/ui dipakai untuk panel chat dan kontrolnya.
 
 ## Remotion
 
@@ -104,9 +111,12 @@ src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi, skema, dan migrasi SQLite
 src/server/episodes/  slug, repository, dan service episode
 src/server/agents/    konfigurasi dan registry proses agen
+src/server/acp/       klien ACP
+src/server/agent-streams/  session manager, riwayat, dan SSE
 src/server/security/  aturan Host/Origin dan token
 src/server/workspace/ penjaga path, whitelist, dan inisialisasi workspace
-src/components/       form dan komponen status episode
+src/components/       form, panel chat, dan komponen status episode
+src/components/ui/    komponen shadcn/ui
 tests/                tes unit
 docs/                 catatan arsitektur dan keamanan
 remotion/             proyek Remotion contoh
