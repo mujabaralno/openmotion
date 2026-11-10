@@ -54,6 +54,7 @@ function startServer(port) {
         ...process.env,
         APP_PORT: String(port),
         WORKFLOW_TOKEN_PATH: tokenPath,
+        WORKSPACE_DIR: path.join(temporaryDirectory, "workspace"),
         NODE_ENV: "development",
       },
       stdio: ["ignore", "pipe", "pipe"],

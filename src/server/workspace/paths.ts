@@ -186,7 +186,7 @@ export function resolveWorkspacePath(
     }
 
     episodeSlug = request.episodeSlug;
-    base = path.join(root, "episodes", episodeSlug);
+    base = path.join(/*turbopackIgnore: true*/ root, "episodes", episodeSlug);
 
     if (!isInside(root, base)) {
       return deny("outside-workspace");
@@ -204,7 +204,11 @@ export function resolveWorkspacePath(
     }
   }
 
-  const target = path.join(base, area.directory, request.fileName);
+  const target = path.join(
+    /*turbopackIgnore: true*/ base,
+    area.directory,
+    request.fileName,
+  );
 
   if (!isInside(root, target)) {
     return deny("outside-workspace");

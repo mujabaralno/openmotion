@@ -34,6 +34,9 @@
 *.db-shm
 *.db-wal
 
+# workspace lokal bila WORKSPACE_DIR diarahkan ke dalam repo
+/workspace/
+
 # remotion
 /remotion/out/
 

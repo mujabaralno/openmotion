@@ -79,7 +79,7 @@ Tes ada di `tests/workspace-paths.test.mts` dan mencakup:
 - Hard link tidak dideteksi; model ancaman di sini adalah input path dan symlink.
 - Masih ada jeda antara pemeriksaan dan operasi file (TOCTOU). Pemeriksaan ulang setelah pembuatan folder mengurangi risiko ini. Aplikasi ini lokal dan satu pengguna.
 - File komposisi Remotion di `remotion/src/episodes/<slug>/` belum masuk daftar putih; pembatasan proses agen dibahas pada integrasi agen.
-- Inisialisasi workspace dan folder `WORKSPACE_DIR` dikerjakan pada M0-5.
+- Inisialisasi workspace dan folder `WORKSPACE_DIR` dijelaskan di [`docs/workspace.md`](workspace.md).
 - API editor file dan layanan media akan memakai fungsi ini pada issue masing-masing.
 
 ## File terkait
