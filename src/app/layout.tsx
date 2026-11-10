@@ -19,6 +19,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "OpenMotion",
   description: "Ruang kerja lokal untuk produksi video edukasi.",
+  icons: { icon: { url: "/favicon.svg", type: "image/svg+xml" } },
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

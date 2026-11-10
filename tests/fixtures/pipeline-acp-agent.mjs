@@ -11,6 +11,8 @@ let model = 'slow';
 let effort = 'high';
 const configured = process.argv.includes('--config');
 const legacy = process.argv.includes('--legacy');
+const delayIndex = process.argv.indexOf('--delay-ms');
+const delayMs = delayIndex >= 0 ? Number(process.argv[delayIndex + 1]) : 0;
 const choices = () => [
   { id: 'model', category: 'model', name: 'Model', type: 'select', currentValue: model, options: [{ group: 'test', name: 'Local models', options: [{ value: 'slow', name: 'Slow model' }, { value: 'fast', name: 'Fast model' }, { value: 'plain', name: 'No reasoning' }] }] },
   ...(model === 'plain' ? [] : [{ id: 'reasoning_effort', category: 'thought_level', name: 'Effort', type: 'select', currentValue: effort, options: (model === 'slow' ? ['medium', 'high'] : ['low', 'medium']).map(value => ({ value, name: value })) }]),
@@ -36,16 +38,20 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     fs.writeFileSync(path.join(cwd, 'test-execution.json'), JSON.stringify({ model, effort }));
     const text = message.params.prompt.map(block => block.text ?? '').join('');
     const stage = text.startsWith('Create the complete') ? 'script' : text.startsWith('Prepare narration') ? 'tags' : 'scenes';
-    const filename = stage === 'script' ? '01-episode.md' : stage === 'tags' ? '02-naskah-tagged.md' : 'remotion/Episode.tsx';
+    const filename = stage === 'script' ? '01-episode.md' : stage === 'tags' ? '02-naskah-tagged.md' : text.match(/^SCENE_OUTPUT_FILE: (.+)$/m)?.[1];
+    if (!filename || (stage === 'scenes' && !filename.startsWith(path.join(cwd, 'src', 'episodes') + path.sep))) { send({ id: message.id, error: { code: -32602, message: 'Scene source is outside the shared project' } }); continue; }
     pending = { promptId: message.id, filename, content: stage === 'script' ? packet : stage === 'tags' ? '[curious] A short local test.\n' : scene };
-    for (const text of ['Preparing ', 'local episode.']) send({ method: 'session/update', params: { sessionId: 'pipeline-test', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
+    for (const text of ['Preparing ', 'local episode.']) {
+      send({ method: 'session/update', params: { sessionId: 'pipeline-test', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
+      if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
     send({ id: 9000, method: 'session/request_permission', params: { sessionId: 'pipeline-test', toolCall: { toolCallId: 'write-artifact', title: `Write ${filename}`, kind: 'edit', rawInput: { path: filename } }, options: [{ optionId: 'allow', name: 'Allow once', kind: 'allow_once' }, { optionId: 'deny', name: 'Reject', kind: 'reject_once' }] } });
   } else if (message.method === 'session/cancel') {
     if (pending) reply(pending.promptId, { stopReason: 'cancelled' });
     pending = null;
   } else if (message.id === 9000 && pending) {
     if (message.result?.outcome?.optionId === 'allow') {
-      const target = path.join(cwd, pending.filename);
+      const target = path.isAbsolute(pending.filename) ? pending.filename : path.join(cwd, pending.filename);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       fs.writeFileSync(target, pending.content);
     }

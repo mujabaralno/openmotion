@@ -5,6 +5,7 @@ import { getSettings } from './settings.ts';
 import { artifactPath, writeArtifact } from './files.ts';
 import { getEpisodeBySlug, listEpisodes } from '../episodes/repository.ts';
 import type { StepKind } from '../db/index.ts';
+import { getRemotionProjectRoot } from '../remotion/project.ts';
 
 function managedPath(root: string, relative: string): string {
   let current = root;
@@ -46,9 +47,12 @@ export function buildStepPrompt(slug: string, kind: StepKind, notes: string): st
     guide: path.join(root, 'guide', 'style-parallax.md'), language: settings.language, captionsLanguage: settings.captionsLanguage, modelId: settings.modelId, skill,
     previous: previous ? artifactPath(previous.slug, '01-episode.md') : 'No previous approved episode. Establish the series constants.',
     package: artifactPath(slug, '01-episode.md'), narration: artifactPath(slug, '01-naskah.md'), tagged: artifactPath(slug, '02-naskah-tagged.md'),
-    audioMetadata: artifactPath(slug, '03-audio.json'), composition: artifactPath(slug, 'Episode.tsx', 'composition'), notes: notes ? `Revision notes from the creator:\n${notes}` : '',
+    audioMetadata: artifactPath(slug, '03-audio.json'), composition: artifactPath(slug, 'Episode.tsx', 'composition'), remotionProject: getRemotionProjectRoot(), audio: artifactPath(slug, 'audio.mp3', 'composition-public'), notes: notes ? `Revision notes from the creator:\n${notes}` : '',
   };
-  writeArtifact(slug, 'AGENTS.md', `# Episode workspace\n\nFollow the skill at ${skill}. Read its referenced documents as needed.\n\nOutput contract: stage script writes 01-episode.md with a fenced text block under the exact heading ## Master Voice-over. The app extracts 01-naskah.md. Stage tags writes only 02-naskah-tagged.md. Stage scenes writes only remotion/Episode.tsx with a default export. Do not edit app-owned metadata, other episodes, credentials, or configuration. Audio and rendering are handled by the application.\n`);
+  writeArtifact(slug, 'AGENTS.md', `# Episode workspace\n\nFollow the skill at ${skill}. Read its referenced documents as needed.\n\nOutput contract: stage script writes 01-episode.md with a fenced text block under the exact heading ## Master Voice-over. The app extracts 01-naskah.md. Stage tags writes only 02-naskah-tagged.md. Stage scenes works in the existing shared Remotion project at ${vars.remotionProject} and writes only ${vars.composition} with a default export. Do not create a Remotion project or install dependencies inside this episode workspace. Do not edit app-owned metadata, other episodes, credentials, or configuration. Audio and rendering are handled by the application.\n`);
   const template = fs.readFileSync(managedPath(root, `prompts/${kind}.md`), 'utf8');
-  return template.replace(/\{\{([a-zA-Z_]+)\}\}/g, (_, key: string) => { if (!(key in vars)) throw new Error(`Variabel template belum tersedia: ${key}`); return vars[key]; });
+  const rendered = template.replace(/\{\{([a-zA-Z_]+)\}\}/g, (_, key: string) => { if (!(key in vars)) throw new Error(`Variabel template belum tersedia: ${key}`); return vars[key]; });
+  if (kind !== 'scenes') return rendered;
+  // This contract also applies to previously customized workspace templates.
+  return `${rendered}\n\nApplication project contract (takes precedence over older setup instructions):\nThe existing Remotion project is ${vars.remotionProject}. This is your working directory. Use its package.json, tsconfig.json, and node_modules; never scaffold another project or install packages. Write the episode visual source only to ${vars.composition}. The app manages that folder's index.tsx and props.json. Audio is staged at ${vars.audio} and is referenced from the project's public directory. Do not create episodes/${slug}/remotion.\nSCENE_OUTPUT_FILE: ${vars.composition}\n`;
 }

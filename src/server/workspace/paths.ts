@@ -9,7 +9,9 @@ export type WorkspaceArea =
   | "logs"
   | "out"
   | "composition"
-  | "composition-public";
+  | "composition-public"
+  | "project-composition"
+  | "project-public";
 
 export const WORKSPACE_FILE_WHITELIST: Record<
   Exclude<WorkspaceArea, "out">,
@@ -31,6 +33,8 @@ export const WORKSPACE_FILE_WHITELIST: Record<
   ],
   composition: ["Episode.tsx", "index.tsx", "props.json"],
   "composition-public": ["audio.mp3", "timestamps.json"],
+  "project-composition": ["Episode.tsx", "index.tsx", "props.json"],
+  "project-public": ["audio.mp3", "timestamps.json"],
   logs: [
     "script.jsonl",
     "tags.jsonl",
@@ -42,7 +46,7 @@ export const WORKSPACE_FILE_WHITELIST: Record<
 
 const AREA_DIRECTORIES: Record<
   WorkspaceArea,
-  { directory: string; scopedToEpisode: boolean }
+  { directory: string; scopedToEpisode: boolean; episodeBase?: string }
 > = {
   root: { directory: "", scopedToEpisode: false },
   prompts: { directory: "prompts", scopedToEpisode: false },
@@ -52,6 +56,8 @@ const AREA_DIRECTORIES: Record<
   out: { directory: "out", scopedToEpisode: true },
   composition: { directory: "remotion", scopedToEpisode: true },
   "composition-public": { directory: "remotion/public", scopedToEpisode: true },
+  "project-composition": { directory: "", scopedToEpisode: true, episodeBase: "src/episodes" },
+  "project-public": { directory: "", scopedToEpisode: true, episodeBase: "public/episodes" },
 };
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -196,7 +202,7 @@ export function resolveWorkspacePath(
     }
 
     episodeSlug = request.episodeSlug;
-    base = path.join(/*turbopackIgnore: true*/ root, "episodes", episodeSlug);
+    base = path.join(/*turbopackIgnore: true*/ root, area.episodeBase ?? "episodes", episodeSlug);
 
     if (!isInside(root, base)) {
       return deny("outside-workspace");

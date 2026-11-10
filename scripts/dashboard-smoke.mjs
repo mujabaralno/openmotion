@@ -22,7 +22,10 @@ for (const name of ['src', 'agents', 'scripts', 'package.json', 'package-lock.js
   if (fs.existsSync(path.join(root, name))) fs.cpSync(path.join(root, name), path.join(project, name), { recursive: true });
 }
 fs.symlinkSync(path.join(root, 'node_modules'), path.join(project, 'node_modules'), 'dir');
-fs.symlinkSync(path.join(root, 'remotion'), path.join(project, 'remotion'), 'dir');
+fs.mkdirSync(path.join(project, 'remotion'), { recursive: true });
+for (const name of ['package.json', 'tsconfig.json', 'AGENTS.md']) fs.copyFileSync(path.join(root, 'remotion', name), path.join(project, 'remotion', name));
+fs.cpSync(path.join(root, 'remotion', 'src'), path.join(project, 'remotion', 'src'), { recursive: true, filter: source => !source.startsWith(path.join(root, 'remotion', 'src', 'episodes')) });
+fs.symlinkSync(path.join(root, 'remotion', 'node_modules'), path.join(project, 'remotion', 'node_modules'), 'dir');
 function start(args) {
   const child = spawn(process.execPath, [next, ...args], { cwd: project, env, detached: true, stdio: ['ignore', 'pipe', 'pipe'] });
   child.stdout.on('data', data => { logs += String(data); if (args[0] === 'build') process.stdout.write(data); });

@@ -93,6 +93,26 @@ function assertDenied(
   assert.deepEqual(result, { ok: false, reason });
 }
 
+test('shared project source and assets stay under their fixed episode directories', () => {
+  withFixture(({ root }) => {
+    const source = resolveWorkspacePath(request(root, { area: 'project-composition', episodeSlug: 'episode-a', fileName: 'Episode.tsx' }));
+    const audio = resolveWorkspacePath(request(root, { area: 'project-public', episodeSlug: 'episode-a', fileName: 'audio.mp3' }));
+    assert.equal(source.ok && source.path, path.join(root, 'src', 'episodes', 'episode-a', 'Episode.tsx'));
+    assert.equal(audio.ok && audio.path, path.join(root, 'public', 'episodes', 'episode-a', 'audio.mp3'));
+    assertDenied(resolveWorkspacePath(request(root, { area: 'project-composition', episodeSlug: 'episode-a', fileName: 'package.json' })), 'filename-not-allowed');
+    assertDenied(resolveWorkspacePath(request(root, { area: 'project-composition', episodeSlug: '../escape', fileName: 'Episode.tsx' })), 'invalid-slug');
+  });
+});
+
+test('shared project paths cannot follow a symlink outside the project', () => {
+  withFixture(({ root, outside }) => {
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.symlinkSync(outside, path.join(root, 'src', 'episodes'), 'dir');
+    assertDenied(resolveWorkspacePath(request(root, { area: 'project-composition', episodeSlug: 'episode-a', fileName: 'Episode.tsx' })), 'symlink');
+    assert.equal(fs.existsSync(path.join(outside, 'episode-a')), false);
+  });
+});
+
 test("mengizinkan seluruh file yang ada di daftar putih", () => {
   withFixture(({ root }) => {
     const cases: Array<{
