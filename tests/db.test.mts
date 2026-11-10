@@ -10,6 +10,12 @@ import {
   STEP_STATUSES,
 } from "../src/server/db/index.ts";
 
+const EXPECTED_MIGRATIONS = [
+  { version: 1, name: "initial-schema" },
+  { version: 2, name: "pipeline-revision-notes" },
+  { version: 3, name: "step-model-and-effort" },
+];
+
 const LEGACY_SCHEMA = `
   CREATE TABLE episodes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -126,6 +132,9 @@ test("membuat database, tabel, indeks, trigger, dan migrasi otomatis", () => {
         "started_at",
         "finished_at",
         "error",
+        "notes",
+        "model_id",
+        "effort",
       ]);
       assert.deepEqual(tableColumns(db, "permission_log"), [
         "id",
@@ -164,7 +173,7 @@ test("membuat database, tabel, indeks, trigger, dan migrasi otomatis", () => {
         db
           .prepare("SELECT version, name FROM schema_migrations")
           .all(),
-        [{ version: 1, name: "initial-schema" }],
+        EXPECTED_MIGRATIONS,
       );
 
       const stepForeignKeys = db
@@ -283,7 +292,7 @@ test("menyimpan data dan membacanya kembali setelah koneksi dibuka ulang", () =>
             .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
             .get() as { count: number }
         ).count,
-        1,
+        3,
       );
     } finally {
       second.close();
@@ -491,7 +500,7 @@ test("migrasi aman dijalankan berulang tanpa menggandakan data", () => {
         );
         assert.deepEqual(
           db.prepare("SELECT version, name FROM schema_migrations").all(),
-          [{ version: 1, name: "initial-schema" }],
+          EXPECTED_MIGRATIONS,
         );
       } finally {
         db.close();
@@ -552,8 +561,8 @@ test("migrasi memperbarui database setup sebelumnya tanpa kehilangan data", () =
         ],
       );
       assert.deepEqual(
-        db.prepare("SELECT kind, status FROM steps").all(),
-        [{ kind: "script", status: "approved" }],
+        db.prepare("SELECT kind, status, notes, model_id, effort FROM steps").all(),
+        [{ kind: "script", status: "approved", notes: "", model_id: null, effort: null }],
       );
       assert.deepEqual(
         db.prepare("SELECT request_summary, decision FROM permission_log").all(),
@@ -566,7 +575,7 @@ test("migrasi memperbarui database setup sebelumnya tanpa kehilangan data", () =
 
       assert.deepEqual(
         db.prepare("SELECT version, name FROM schema_migrations").all(),
-        [{ version: 1, name: "initial-schema" }],
+        EXPECTED_MIGRATIONS,
       );
 
       const triggers = namesOf(db, "trigger");

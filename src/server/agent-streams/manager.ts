@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { redactValue, redactText, safeStreamPrefix } from "../security/redact.ts";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type Database from "better-sqlite3";
@@ -36,9 +37,14 @@ export type StartStepStreamOptions = {
   kind: StepKind;
   agentId: string;
   prompt: string;
+  modelId?: string | null;
+  effort?: string | null;
   workspaceRoot?: string;
   stepId?: number | null;
   db?: Database.Database;
+  onComplete?: () => Promise<void>;
+  onFailure?: (message: string) => void;
+  onSettled?: () => void;
 };
 
 export type StepStreamInfo = {
@@ -79,6 +85,8 @@ type StreamState = {
   db: Database.Database | null;
   autoApprovePermissions: boolean;
   pendingPermissions: Map<string, PendingPermission>;
+  textTail?: string;
+  tailUpdate?: AcpUpdate;
 };
 
 type StreamsState = {
@@ -114,6 +122,7 @@ function errorMessage(error: unknown): string {
 }
 
 function publish(state: StreamState, event: AgentStreamEvent): void {
+  event = redactValue(event);
   state.events.push(event);
 
   try {
@@ -152,6 +161,14 @@ function emitPrompt(state: StreamState, text: string): void {
 }
 
 function emitUpdate(state: StreamState, update: AcpUpdate): void {
+  if (update.sessionUpdate === "agent_thought_chunk") return;
+  if (update.sessionUpdate === "agent_message_chunk" && typeof update.content?.text === "string") {
+    const result = safeStreamPrefix((state.textTail ?? "") + update.content.text);
+    state.textTail = result.rest;
+    state.tailUpdate = update;
+    if (!result.text) return;
+    update = { ...update, content: { ...update.content, text: result.text } };
+  }
   publish(state, {
     seq: state.seq + 1,
     attemptId: state.attemptId,
@@ -168,6 +185,12 @@ function emitStatus(
   extra: { stopReason?: string; error?: string } = {},
 ): void {
   if (status !== "running") {
+    if (state.textTail && state.tailUpdate) {
+      const tail = redactText(state.textTail);
+      state.textTail = "";
+      publish(state, { seq: state.seq + 1, attemptId: state.attemptId, type: "update", update: { ...state.tailUpdate, content: { ...state.tailUpdate.content, text: tail } }, at: new Date().toISOString() });
+      state.seq += 1;
+    }
     expirePendingPermissions(state);
   }
 
@@ -217,11 +240,9 @@ function selectPermissionOptions(options: AcpPermissionOption[]): {
 } {
   return {
     allow:
-      options.find((option) => option.kind === "allow_once") ??
-      options.find((option) => option.kind.startsWith("allow")),
+      options.find((option) => option.kind === "allow_once"),
     reject:
-      options.find((option) => option.kind === "reject_once") ??
-      options.find((option) => option.kind.startsWith("reject")),
+      options.find((option) => option.kind === "reject_once"),
   };
 }
 
@@ -237,7 +258,9 @@ function permissionRequestSummary(request: AcpPermissionRequest): {
     parts.push(request.toolCall.toolCallId);
   }
 
-  return { title, summary: parts.join(" · ") };
+  if (request.toolCall?.rawInput !== undefined) parts.push(String(JSON.stringify(request.toolCall.rawInput)).slice(0, 5000));
+  if (request.toolCall?.locations !== undefined) parts.push(String(JSON.stringify(request.toolCall.locations)).slice(0, 1000));
+  return { title, summary: redactText(parts.join(" | ")) };
 }
 
 function createPermissionRecord(
@@ -282,7 +305,7 @@ function persistPermissionDecision(
       "INSERT INTO permission_log (step_id, request_summary, decision, decided_at) VALUES (?, ?, ?, ?)",
     ).run(
       state.stepId,
-      permission.summary,
+      redactText(permission.summary),
       decisionLabel,
       permission.decidedAt ?? new Date().toISOString(),
     );
@@ -589,11 +612,11 @@ function validateStartOptions(
   if (
     typeof options.prompt !== "string" ||
     !options.prompt.trim() ||
-    options.prompt.length > 20000
+    options.prompt.length > 100000
   ) {
     throw new AgentStreamError(
       "invalid-request",
-      "Prompt wajib diisi dan maksimal 20000 karakter.",
+      "Prompt wajib diisi dan maksimal 100000 karakter.",
     );
   }
 }
@@ -706,24 +729,35 @@ export async function startStepStream(
 
   try {
     await acp.start();
+    await acp.configure({ modelId: options.modelId, effort: options.effort });
   } catch (error) {
+    options.onFailure?.(errorMessage(error));
     emitStatus(stream, "failed", { error: errorMessage(error) });
     stream.acp = null;
     await acp.close();
+    options.onSettled?.();
     throw new AgentStreamError("start-failed", errorMessage(error));
   }
 
   void (async () => {
     try {
       const result = await acp.prompt(options.prompt);
+      if (stream.terminal) return;
+      if (result.stopReason !== "end_turn") throw new Error(`Agen belum menyelesaikan pekerjaan (${result.stopReason}).`);
+      await options.onComplete?.();
+      if (stream.terminal) return;
       emitStatus(stream, "completed", {
         stopReason: result.stopReason,
       });
     } catch (error) {
-      emitStatus(stream, "failed", { error: errorMessage(error) });
+      if (!stream.terminal) {
+        options.onFailure?.(errorMessage(error));
+        emitStatus(stream, "failed", { error: errorMessage(error) });
+      }
     } finally {
       stream.acp = null;
       await acp.close();
+      options.onSettled?.();
     }
   })();
 
@@ -884,4 +918,14 @@ export async function resetAgentStreamsForTests(): Promise<void> {
   await Promise.all(closers);
   stopAllAgentSessions({ force: true });
   state.streams.clear();
+}
+
+export async function cancelStepStream(episodeSlug: string, kind: StepKind): Promise<void> {
+  const stream = getStreamsState().streams.get(streamKey(episodeSlug, kind));
+  if (!stream || stream.terminal) return;
+  const acp = stream.acp;
+  emitStatus(stream, "failed", { error: "Sesi dibatalkan pengguna." });
+  acp?.cancel();
+  await acp?.close();
+  stream.acp = null;
 }

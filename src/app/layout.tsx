@@ -1,23 +1,35 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { Geist, Geist_Mono } from "next/font/google";
+import { DashboardShell } from "@/components/dashboard-shell";
 import { SecurityBootstrap } from "@/components/SecurityBootstrap";
-import "./globals.css";
-import { Geist } from "next/font/google";
 import { cn } from "@/lib/utils";
+import "./globals.css";
 
-const geist = Geist({subsets:['latin'],variable:'--font-sans'});
+const geist = Geist({
+  subsets: ["latin"],
+  variable: "--font-geist-sans",
+});
+
+const geistMono = Geist_Mono({
+  subsets: ["latin"],
+  variable: "--font-geist-mono",
+});
 
 export const metadata: Metadata = {
-  title: "Workflow Studio",
-  description: "Aplikasi lokal untuk mengelola produksi video.",
+  title: "OpenMotion",
+  description: "Ruang kerja lokal untuk produksi video edukasi.",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="id" className={cn("font-sans", geist.variable)}>
-      <body className="min-h-screen bg-slate-50 text-slate-900 antialiased">
+    <html
+      lang="id"
+      className={cn(geist.variable, geistMono.variable)}
+    >
+      <body className="min-h-[100dvh] bg-background text-foreground antialiased">
         <SecurityBootstrap />
-        {children}
+        <DashboardShell>{children}</DashboardShell>
       </body>
     </html>
   );

@@ -42,6 +42,8 @@ Respons keputusan berisi `{ permission }` dengan status terbaru. Penolakan:
 
 ## `permission_log`
 
+Persetujuan hanya memilih opsi `allow_once`; agen yang hanya menawarkan persetujuan permanen tidak disetujui lewat tombol satu tindakan.
+
 Setiap keputusan yang dicatat menyimpan:
 
 - `step_id` — langkah episode terkait;
@@ -92,11 +94,13 @@ Cakupan izin:
 - Mode tidak terbawa ke eksekusi baru atau langkah lain.
 - Keputusan ganda, tidak valid, dan kegagalan log tidak menyetujui tindakan.
 - Izin pending dari sesi berakhir menjadi `expired` dan tidak dapat disetujui setelah refresh.
-- Route izin valid/invalid diuji lewat server Next dan SSE sungguhan.
+- Persetujuan izin diuji lewat server Next dan SSE sungguhan; penolakan, keputusan tidak valid/ganda, dan kegagalan pencatatan juga diperiksa pada tes manager.
 
 ## Batasan
 
-- Tombol pembatalan sesi menyeluruh mengikuti M1-6.
-- Redaksi rahasia/transkrip lengkap mengikuti M1-7.
+- Tombol pembatalan dashboard membatalkan sesi ACP dan membersihkan process group.
+- Transkrip dan keluaran SSE disaring dari rahasia yang dikenal, termasuk kredensial terbelah antarchunk.
 - Mode otomatis hanya untuk izin ACP yang dikirim agen; tidak mengubah mode internal agen.
 - Keputusan izin tetap memeriksa sesi aktif; jika sesi berakhir, permintaan tidak dapat disetujui.
+
+Tes pipeline dan dashboard sekarang memakai kontrak produksi yang membangun prompt di server. Hasil verifikasi ada di `testing.md`; panggilan akun agen asli dilakukan terpisah.

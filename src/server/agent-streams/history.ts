@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { redactValue } from "../security/redact.ts";
 import path from "node:path";
 import type { AcpUpdate } from "../acp/types.ts";
 import type { StepKind } from "../db/index.ts";
@@ -16,6 +17,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function parseEvent(value: unknown): AgentStreamEvent | null {
+  value = redactValue(value);
   if (!isRecord(value)) return null;
   if (typeof value.attemptId !== "string") return null;
   if (typeof value.seq !== "number" || !Number.isInteger(value.seq)) {
@@ -122,7 +124,7 @@ export function appendStepEvent(
     recursive: true,
     mode: 0o700,
   });
-  fs.appendFileSync(logPath, `${JSON.stringify(event)}\n`, {
+  fs.appendFileSync(logPath, `${JSON.stringify(redactValue(event))}\n`, {
     encoding: "utf8",
     mode: 0o600,
   });

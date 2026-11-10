@@ -7,7 +7,9 @@ export type WorkspaceArea =
   | "guide"
   | "episode"
   | "logs"
-  | "out";
+  | "out"
+  | "composition"
+  | "composition-public";
 
 export const WORKSPACE_FILE_WHITELIST: Record<
   Exclude<WorkspaceArea, "out">,
@@ -18,11 +20,17 @@ export const WORKSPACE_FILE_WHITELIST: Record<
   guide: ["style-parallax.md"],
   episode: [
     "episode.json",
+    "01-episode.md",
+    "03-audio.json",
+    "04-scenes.json",
+    "AGENTS.md",
     "01-naskah.md",
     "02-naskah-tagged.md",
     "03-voiceover.mp3",
     "03-voiceover.timestamps.json",
   ],
+  composition: ["Episode.tsx", "index.tsx", "props.json"],
+  "composition-public": ["audio.mp3", "timestamps.json"],
   logs: [
     "script.jsonl",
     "tags.jsonl",
@@ -42,6 +50,8 @@ const AREA_DIRECTORIES: Record<
   episode: { directory: "", scopedToEpisode: true },
   logs: { directory: "logs", scopedToEpisode: true },
   out: { directory: "out", scopedToEpisode: true },
+  composition: { directory: "remotion", scopedToEpisode: true },
+  "composition-public": { directory: "remotion/public", scopedToEpisode: true },
 };
 
 const SLUG_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -194,7 +204,7 @@ export function resolveWorkspacePath(
   }
 
   if (request.area === "out") {
-    if (!episodeSlug || request.fileName !== `${episodeSlug}.mp4`) {
+    if (!episodeSlug || (request.fileName !== `${episodeSlug}.mp4` && request.fileName !== "preview.mp4")) {
       return deny("filename-not-allowed");
     }
   } else {

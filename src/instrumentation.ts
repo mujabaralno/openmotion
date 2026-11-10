@@ -5,6 +5,8 @@ export async function register() {
 
     const { getDb } = await import("./server/db");
     getDb();
+    const { recoverInterruptedSteps } = await import("./server/pipeline/state");
+    recoverInterruptedSteps();
 
     const {
       initializeWorkspace,
@@ -13,6 +15,8 @@ export async function register() {
 
     try {
       const workspace = initializeWorkspace();
+      const { seedProductionFiles } = await import("./server/pipeline/prompts");
+      seedProductionFiles();
       console.info(`[workspace] siap di ${workspace.workspaceRoot}`);
     } catch (error) {
       if (error instanceof WorkspaceInitializationError) {

@@ -18,6 +18,8 @@ export type AcpPermissionRequest = {
     toolCallId?: string;
     title?: string;
     kind?: string;
+    rawInput?: unknown;
+    locations?: unknown;
   };
   options: AcpPermissionOption[];
 };

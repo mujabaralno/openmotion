@@ -113,18 +113,11 @@ export function createEpisode(
   input: CreateEpisodeInput,
   options: CreateEpisodeOptions = {},
 ): Episode {
-  const title = normalizeField(
-    input.title,
-    "Judul",
-    MAX_TITLE_LENGTH,
-    true,
-  );
-  const topic = normalizeField(
-    input.topic,
-    "Topik",
-    MAX_TOPIC_LENGTH,
-    false,
-  );
+  const topic = normalizeField(input.topic, "Topik", MAX_TOPIC_LENGTH, false);
+  const titleInput = typeof input.title === "string"
+    ? input.title.trim() || topic.slice(0, MAX_TITLE_LENGTH)
+    : input.title ?? topic.slice(0, MAX_TITLE_LENGTH);
+  const title = normalizeField(titleInput, "Judul", MAX_TITLE_LENGTH, true);
 
   const db = options.db ?? getDb();
   const workspace = initializeWorkspace({

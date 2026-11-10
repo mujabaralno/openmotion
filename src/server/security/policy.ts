@@ -10,7 +10,7 @@ export type SecurityPolicyOptions = {
 };
 
 export function getAppPort(): string {
-  return process.env.APP_PORT ?? process.env.PORT ?? "3000";
+  return process.env.APP_PORT?.trim() || process.env.PORT?.trim() || "3000";
 }
 
 export function createSecurityPolicy(

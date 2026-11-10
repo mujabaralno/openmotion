@@ -40,6 +40,10 @@
   ],
   "exclude": [
     "node_modules",
-    "remotion"
+    "remotion",
+    "workspace",
+    "data",
+    ".next-smoke-*",
+    ".next-build-check-*"
   ]
 }

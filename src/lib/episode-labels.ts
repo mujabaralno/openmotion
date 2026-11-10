@@ -1,10 +1,10 @@
 import type { StepKind, StepStatus } from "@/server/db/index";
 
 export const STEP_LABELS: Record<StepKind, string> = {
-  script: "Naskah",
+  script: "Paket episode",
   tags: "Tag emosi",
   voiceover: "Voice-over",
-  scenes: "Scene",
+  scenes: "Rakit scene",
   render: "Render",
 };
 

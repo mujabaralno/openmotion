@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
+import { AlertIcon, ArrowUpRightIcon, PlusIcon } from "@/components/icons";
 
 type CreateResponse = {
   episode?: { slug?: string };
@@ -10,10 +11,10 @@ type CreateResponse = {
 };
 
 const inputClasses =
-  "w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm outline-none transition placeholder:text-slate-400 focus:border-blue-600 focus:ring-2 focus:ring-blue-200 disabled:cursor-not-allowed disabled:opacity-60";
+  "w-full border-0 border-b border-border bg-transparent px-0 py-3 text-2xl font-medium tracking-[-0.03em] text-foreground outline-none transition-colors placeholder:text-muted-foreground/45 focus:border-primary disabled:cursor-not-allowed disabled:opacity-60";
 
-const buttonClasses =
-  "inline-flex items-center justify-center rounded-lg bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-300 disabled:cursor-not-allowed disabled:opacity-60";
+const topicClasses =
+  "min-h-24 w-full resize-y rounded-xl border border-border bg-card/60 px-3.5 py-3 text-sm leading-relaxed text-foreground outline-none transition-colors placeholder:text-muted-foreground/60 focus:border-primary focus:ring-2 focus:ring-primary/15 disabled:cursor-not-allowed disabled:opacity-60";
 
 export function EpisodeCreateForm() {
   const router = useRouter();
@@ -87,28 +88,40 @@ export function EpisodeCreateForm() {
 
   return (
     <form
-      className="mb-5 rounded-xl border border-slate-200 bg-white p-5 shadow-sm"
+      className="border-t border-border pt-6"
       onSubmit={handleSubmit}
     >
-      <div className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-semibold text-slate-900">Episode baru</h2>
-        <span className="text-sm text-slate-500">
-          Slug dibuat otomatis dari judul.
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-primary">
+            01 / Brief
+          </p>
+          <h2 className="mt-1 text-xl font-medium tracking-[-0.03em] text-foreground">
+            Episode baru
+          </h2>
+        </div>
+        <span className="pb-1 font-mono text-[9px] uppercase tracking-[0.14em] text-muted-foreground">
+          Slug otomatis
         </span>
       </div>
 
       {error ? (
         <div
-          className="mb-4 space-y-1 rounded-lg border border-red-200 bg-red-50 px-3 py-2.5 text-sm text-red-800"
+          className="mt-5 flex gap-3 rounded-xl border border-destructive/25 bg-destructive/[0.06] px-3.5 py-3 text-sm text-destructive"
           role="alert"
         >
-          <p>{error}</p>
-          {fix ? <p>{fix}</p> : null}
+          <AlertIcon className="mt-0.5 size-4 shrink-0" />
+          <div className="space-y-1">
+            <p>{error}</p>
+            {fix ? <p className="text-destructive/80">{fix}</p> : null}
+          </div>
         </div>
       ) : null}
 
-      <label className="mb-3 flex flex-col gap-1.5 text-sm font-semibold text-slate-800">
-        <span>Judul</span>
+      <label className="mt-7 grid gap-1.5">
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Judul
+        </span>
         <input
           name="title"
           value={title}
@@ -117,13 +130,18 @@ export function EpisodeCreateForm() {
           required
           autoComplete="off"
           disabled={pending}
-          placeholder="Misalnya: Misteri di balik pintu"
+          placeholder="Misteri di balik pintu"
           className={inputClasses}
         />
+        <span className="text-xs leading-relaxed text-muted-foreground">
+          Judul ini tampil di arsip dan menjadi dasar slug episode.
+        </span>
       </label>
 
-      <label className="mb-3 flex flex-col gap-1.5 text-sm font-semibold text-slate-800">
-        <span>Topik</span>
+      <label className="mt-6 grid gap-2">
+        <span className="font-mono text-[10px] uppercase tracking-[0.16em] text-muted-foreground">
+          Topik
+        </span>
         <textarea
           name="topic"
           value={topic}
@@ -131,14 +149,30 @@ export function EpisodeCreateForm() {
           maxLength={500}
           rows={3}
           disabled={pending}
-          placeholder="Ringkasan singkat ide episode (opsional)"
-          className={inputClasses}
+          placeholder="Ringkasan singkat ide episode. Opsional."
+          className={topicClasses}
         />
       </label>
 
-      <button type="submit" disabled={pending} className={buttonClasses}>
-        {pending ? "Menyimpan..." : "Buat episode"}
+      <button
+        type="submit"
+        disabled={pending}
+        className="group mt-6 inline-flex w-full items-center justify-between gap-3 rounded-full bg-primary px-4 py-3 text-sm font-medium text-primary-foreground transition-all duration-300 hover:brightness-105 active:translate-y-px disabled:cursor-not-allowed disabled:opacity-60 sm:w-auto sm:min-w-52"
+      >
+        <span className="flex items-center gap-2.5">
+          {pending ? (
+            <span className="size-3.5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+          ) : (
+            <PlusIcon className="size-4" />
+          )}
+          {pending ? "Menyiapkan episode..." : "Buat episode"}
+        </span>
+        <ArrowUpRightIcon className="size-4 transition-transform duration-300 group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
       </button>
+
+      <p className="mt-3 font-mono text-[9px] uppercase tracking-[0.12em] text-muted-foreground">
+        Data lokal / SQLite / workspace
+      </p>
     </form>
   );
 }
