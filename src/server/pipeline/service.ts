@@ -12,6 +12,9 @@ import { assertCanRun, beginStep, getSteps, requestRevision, setStep } from './s
 import { buildStepPrompt } from './prompts.ts';
 import { prepareComposition } from './composition.ts';
 import { generateVoiceover } from '../elevenlabs/client.ts';
+import { AGENT_STEP_KINDS } from '../../lib/pipeline-steps.ts';
+import { parsePublishPack } from '../../lib/publish-pack.ts';
+import { validateThumbnail } from './thumbnail.ts';
 import { runRenderWorker } from '../render/runner.ts';
 
 type Task = { id: string; kind: StepKind; controller: AbortController; phase: string; progress: number };
@@ -26,7 +29,7 @@ export function pipelineView(slug: string) {
   const episode = getEpisodeBySlug(slug);
   if (!episode) throw new Error('Episode tidak ditemukan.');
   const task = runtime().tasks.get(slug);
-  const files = ['01-episode.md', '01-naskah.md', '02-naskah-tagged.md', '03-voiceover.mp3', '03-audio.json', '04-scenes.json'].filter(name => hasArtifact(slug, name));
+  const files = ['01-episode.md', '01-naskah.md', '02-naskah-tagged.md', '03-voiceover.mp3', '03-audio.json', '04-scenes.json', '05-thumbnail.svg', '06-publish.md'].filter(name => hasArtifact(slug, name));
   let audio: { duration?: number; modelId?: string; voiceId?: string } | null = null;
   if (hasArtifact(slug, '03-audio.json')) { try { audio = JSON.parse(readArtifact(slug, '03-audio.json')); } catch { /* invalid artifact surfaced when running */ } }
   let scenes: { captionsEstimated?: boolean } | null = null;
@@ -99,7 +102,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
   };
   const modelId = choice(input.modelId, 'Model');
   const effort = choice(input.effort, 'Effort');
-  if (kind === 'script' || kind === 'tags' || kind === 'scenes') {
+  if (AGENT_STEP_KINDS.includes(kind)) {
     const agents = loadAgentsConfig();
     const settings = getSettings();
     agentId = (typeof input.agentId === 'string' && input.agentId ? input.agentId : settings.agentId || agents.agents[0]?.id) ?? null;
@@ -107,7 +110,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
     prompt = buildStepPrompt(slug, kind, step.notes);
     if (kind === 'scenes') prepareComposition(slug);
   }
-  const output = agentId ? (kind === 'script' ? artifactPath(slug, '01-episode.md') : kind === 'tags' ? artifactPath(slug, '02-naskah-tagged.md') : artifactPath(slug, 'Episode.tsx', 'composition')) : '';
+  const output = agentId ? (kind === 'script' ? artifactPath(slug, '01-episode.md') : kind === 'tags' ? artifactPath(slug, '02-naskah-tagged.md') : kind === 'thumbnail' ? artifactPath(slug, '05-thumbnail.svg') : kind === 'publish' ? artifactPath(slug, '06-publish.md') : artifactPath(slug, 'Episode.tsx', 'composition')) : '';
   const oldModified = output && fs.existsSync(output) ? fs.statSync(output).mtimeMs : null;
   const task: Task = { id: randomUUID(), kind, controller: new AbortController(), phase: 'Memulai', progress: 0 };
   beginStep(slug, kind, agentId, agentId ? modelId : null, agentId ? effort : null);
@@ -115,7 +118,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
   const settle = () => { if (runtime().tasks.get(slug)?.id === task.id) runtime().tasks.delete(slug); };
   const fail = (message: string) => { if (taskActive(slug, task)) setStep(slug, kind, 'failed', redactText(message)); };
   if (agentId) {
-    task.phase = kind === 'script' ? 'Menyusun paket episode' : kind === 'tags' ? 'Menyiapkan tag emosi' : 'Merakit scene';
+    task.phase = kind === 'script' ? 'Menyusun paket episode' : kind === 'tags' ? 'Menyiapkan tag emosi' : kind === 'thumbnail' ? 'Membuat thumbnail' : kind === 'publish' ? 'Menyiapkan paket publikasi' : 'Merakit scene';
     try {
       const attempt = await startStepStream({ episodeSlug: slug, kind, agentId, modelId, effort, workingDirectory: kind === 'scenes' ? 'remotion' : 'episode', prompt, stepId: step.id,
         onComplete: async () => {
@@ -123,6 +126,8 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
           if (!fs.existsSync(output) || fs.statSync(output).mtimeMs === oldModified) throw new Error('Agen belum menulis atau memperbarui file keluaran yang diminta.');
           if (kind === 'script') validateScript(slug);
           if (kind === 'tags') validateTags(slug);
+          if (kind === 'thumbnail') validateThumbnail(readArtifact(slug, '05-thumbnail.svg'));
+          if (kind === 'publish') parsePublishPack(readArtifact(slug, '06-publish.md'));
           if (kind === 'scenes') {
             const code = fs.readFileSync(output, 'utf8');
             if (!/export\s+default\b|export\s*\{[^}]*\bas\s+default\b/.test(code)) throw new Error('Episode.tsx harus memiliki default export.');
@@ -162,6 +167,8 @@ export function approveStep(slug: string, kind: StepKind) {
   if (kind === 'tags') validateTags(slug);
   if (kind === 'voiceover' && !hasArtifact(slug, '03-voiceover.mp3')) throw new Error('Audio belum tersedia.');
   if (kind === 'scenes' && !hasArtifact(slug, 'preview.mp4', 'out')) throw new Error('Preview belum tersedia.');
+  if (kind === 'thumbnail') validateThumbnail(readArtifact(slug, '05-thumbnail.svg'));
+  if (kind === 'publish') parsePublishPack(readArtifact(slug, '06-publish.md'));
   if (kind === 'render' && !hasArtifact(slug, `${slug}.mp4`, 'out')) throw new Error('Video belum tersedia.');
   setStep(slug, kind, 'approved'); return pipelineView(slug);
 }
@@ -180,7 +187,7 @@ export function reviseStep(slug: string, kind: StepKind, notes: unknown) {
   requestRevision(slug, kind, notes.trim()); return pipelineView(slug);
 }
 export function saveTextArtifact(slug: string, name: string, content: unknown) {
-  const owner: Record<string, StepKind> = { '01-episode.md': 'script', '01-naskah.md': 'script', '02-naskah-tagged.md': 'tags' };
+  const owner: Record<string, StepKind> = { '01-episode.md': 'script', '01-naskah.md': 'script', '02-naskah-tagged.md': 'tags', '06-publish.md': 'publish' };
   if (!owner[name]) throw new Error('File ini tidak dapat diedit melalui editor.');
   if (typeof content !== 'string' || !content.trim() || content.length > 200000) throw new Error('Isi file wajib diisi, maksimal 200000 karakter.');
   if (runtime().tasks.has(slug) || getSteps(slug).some(step => step.status === 'running')) throw new Error('Tunggu pekerjaan selesai sebelum mengedit.');
@@ -190,8 +197,9 @@ export function saveTextArtifact(slug: string, name: string, content: unknown) {
     const replacement = packet.replace(/(^## Master Voice-over\s*\r?\n+```(?:text)?\s*\r?\n)[\s\S]*?(\r?\n```)/m, (_, before: string, after: string) => `${before}${content.trim()}${after}`);
     writeArtifact(slug, '01-episode.md', replacement);
   }
+  if (owner[name] === 'publish') parsePublishPack(content);
   writeArtifact(slug, name, content);
   requestRevision(slug, owner[name], 'Hasil diedit manual. Periksa konsistensi dengan scene dan narasi sebelum lanjut.');
-  if (owner[name] === 'script') validateScript(slug); else validateTags(slug);
+  if (owner[name] === 'script') validateScript(slug); else if (owner[name] === 'tags') validateTags(slug);
   setStep(slug, owner[name], 'review');
 }

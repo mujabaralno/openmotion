@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import { Readable } from 'node:stream';
+import { validateThumbnail } from '@/server/pipeline/thumbnail';
 import { artifactPath } from '@/server/pipeline/files';
 import { apiError, json, stepParams } from '@/server/pipeline/http';
 export const dynamic = 'force-dynamic';
@@ -8,11 +9,19 @@ async function serve(request:Request, context:{params:Promise<{slug:string;name:
   try {
     const {slug,name}=await context.params; stepParams(slug,'script');
     const audio=name==='03-voiceover.mp3';
-    if(!audio && name!=='preview.mp4' && name!==`${slug}.mp4`) throw new Error('Media tidak diizinkan.');
-    const target=artifactPath(slug,name,audio?'episode':'out');
+    const thumbnail=name==='05-thumbnail.svg';
+    if(!audio && !thumbnail && name!=='preview.mp4' && name!==`${slug}.mp4`) throw new Error('Media tidak diizinkan.');
+    const target=artifactPath(slug,name,audio||thumbnail?'episode':'out');
     if(!fs.existsSync(target)) return json({error:'Media belum tersedia.'},404);
-    const size=fs.statSync(target).size;
-    const headers=new Headers({'Content-Type':audio?'audio/mpeg':'video/mp4','Accept-Ranges':'bytes','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Disposition':`${new URL(request.url).searchParams.has('download')?'attachment':'inline'}; filename="${name}"`});
+    let thumbnailData: Buffer | null = null;
+    if(thumbnail) {
+      if(fs.statSync(target).size>200_000) throw new Error('Thumbnail SVG terlalu besar.');
+      thumbnailData=fs.readFileSync(target);
+      validateThumbnail(thumbnailData.toString('utf8'));
+    }
+    const size=thumbnailData?.length ?? fs.statSync(target).size;
+    const headers=new Headers({'Content-Type':audio?'audio/mpeg':thumbnail?'image/svg+xml':'video/mp4','Accept-Ranges':'bytes','Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Content-Disposition':`${new URL(request.url).searchParams.has('download')?'attachment':'inline'}; filename="${name}"`});
+    if(thumbnail) headers.set('Content-Security-Policy', "default-src 'none'; style-src 'none'; sandbox");
     let start=0; let end=size-1; let status=200;
     const range=request.headers.get('range');
     if(range) {
@@ -25,6 +34,7 @@ async function serve(request:Request, context:{params:Promise<{slug:string;name:
     }
     headers.set('Content-Length',String(end-start+1));
     if(head) return new Response(null,{status,headers});
+    if(thumbnailData) return new Response(new Uint8Array(thumbnailData.subarray(start,end+1)),{status,headers});
     const stream=fs.createReadStream(target,{start,end});
     request.signal.addEventListener('abort',()=>stream.destroy(),{once:true});
     return new Response(Readable.toWeb(stream) as ReadableStream<Uint8Array>,{status,headers});

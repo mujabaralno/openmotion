@@ -18,13 +18,15 @@ export const WORKSPACE_FILE_WHITELIST: Record<
   readonly string[]
 > = {
   root: ["agents.json"],
-  prompts: ["script.md", "tags.md", "scenes.md"],
+  prompts: ["script.md", "tags.md", "scenes.md", "thumbnail.md", "publish.md"],
   guide: ["style-parallax.md"],
   episode: [
     "episode.json",
     "01-episode.md",
     "03-audio.json",
     "04-scenes.json",
+    "05-thumbnail.svg",
+    "06-publish.md",
     "AGENTS.md",
     "01-naskah.md",
     "02-naskah-tagged.md",
@@ -41,6 +43,8 @@ export const WORKSPACE_FILE_WHITELIST: Record<
     "voiceover.jsonl",
     "scenes.jsonl",
     "render.jsonl",
+    "thumbnail.jsonl",
+    "publish.jsonl",
   ],
 };
 

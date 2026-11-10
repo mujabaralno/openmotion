@@ -24,7 +24,7 @@ Hubungan:
 - `permission_log.step_id` → `steps.id`, `ON DELETE CASCADE`.
 - `render_jobs.episode_id` → `episodes.id`, `ON DELETE CASCADE`.
 
-Nilai yang diizinkan untuk `steps.kind`: `script`, `tags`, `voiceover`, `scenes`, `render`. Nilai `steps.status`: `idle`, `running`, `review`, `approved`, `failed`. Nilai-nilai ini diekspor sebagai `STEP_KINDS` dan `STEP_STATUSES`, dan trigger database menolak `INSERT`/`UPDATE` dengan nilai lain.
+Nilai yang diizinkan untuk `steps.kind`: `script`, `tags`, `voiceover`, `scenes`, `render`, `thumbnail`, `publish`. Nilai `steps.status`: `idle`, `running`, `review`, `approved`, `failed`. Nilai-nilai ini diekspor sebagai `STEP_KINDS` dan `STEP_STATUSES`, dan trigger database menolak `INSERT`/`UPDATE` dengan nilai lain.
 
 Isi percakapan agen tidak disimpan di database. Transkrip tetap berupa file `logs/<kind>.jsonl` di folder episode.
 
@@ -77,3 +77,5 @@ sqlite3 data/app.db "SELECT * FROM schema_migrations;"
 ```
 
 Jangan menyalin isi database ke issue, log, atau dokumen publik.
+
+Migrasi 4 (`thumbnail-and-publish-steps`) memperbarui trigger kind/status dan menambahkan baris idle `thumbnail` serta `publish` ke episode yang sudah ada jika belum tersedia. ID langkah, persetujuan sebelumnya, permission_log, dan render_jobs dipertahankan.

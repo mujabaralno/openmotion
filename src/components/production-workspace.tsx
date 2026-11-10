@@ -22,6 +22,9 @@ import { Button } from "./ui/button";
 import { Textarea } from "./ui/textarea";
 import { AgentStreamView } from "./agent-chat-panel";
 import { StudioModal } from "./studio-modal";
+import { ThumbnailPreview } from "./thumbnail-preview";
+import { PublishPackPreview } from "./publish-pack-preview";
+import { STEP_KINDS, AGENT_STEP_KINDS } from "@/lib/pipeline-steps";
 import { DocumentMarkdown } from "./document-markdown";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { studioRequest } from "@/lib/studio-api";
@@ -34,7 +37,7 @@ import type {
 } from "@/server/acp/configuration";
 
 type View = ReturnType<typeof pipelineView>;
-const kinds: StepKind[] = ["script", "tags", "voiceover", "scenes", "render"];
+const kinds = STEP_KINDS;
 const descriptions: Record<StepKind, string> = {
   script:
     "Agen menyiapkan naskah, prompt scene, layer map, camera plan, dan master narasi.",
@@ -43,11 +46,14 @@ const descriptions: Record<StepKind, string> = {
   scenes:
     "Agen merakit visual di proyek Remotion utama dari paket episode dan audio. Preview dibuat sebelum persetujuan.",
   render:
-    "Render video final, tinjau hasilnya, lalu setujui atau minta revisi scene.",
+    "Render video final, tinjau hasilnya, lalu setujui untuk menyiapkan thumbnail.",
+  thumbnail: "Agen membuat cover SVG dari visual episode, dengan subjek dan teks yang mudah dibaca.",
+  publish: "Siapkan judul, deskripsi, dan hashtag yang sesuai dengan video serta thumbnail.",
 };
 const fileChoices: Record<string, string[]> = {
   script: ["01-episode.md", "01-naskah.md"],
   tags: ["02-naskah-tagged.md"],
+  publish: ["06-publish.md"],
 };
 type ExecutionChoice = { agentId: string; modelId: string; effort: string };
 function SelectorOptions({ selector }: { selector: AgentSelector }) {
@@ -66,7 +72,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
   const slug = initial.episode.slug;
   const [data, setData] = useState(initial);
   const [kind, setKind] = useState<StepKind>(
-    initial.steps.find((s) => s.status !== "approved")?.kind ?? "render",
+    initial.steps.find((s) => s.status !== "approved")?.kind ?? "publish",
   );
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [agentId, setAgentId] = useState("");
@@ -155,7 +161,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
   const unlocked = data.steps
     .slice(0, kinds.indexOf(kind))
     .every((s) => s.status === "approved");
-  const agentStage = ["script", "tags", "scenes"].includes(kind);
+  const agentStage = AGENT_STEP_KINDS.includes(kind);
   const execution = executionChoices[kind] ?? {
     agentId: step.agentId || agentId,
     modelId: step.modelId ?? "",
@@ -302,7 +308,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
       if (name === "run" && agentStage) sessionSection.current?.scrollIntoView({ block: "start", behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
       setRevision(false);
       setOverwrite(false);
-      if (name === "approve" && kind !== "render") {
+      if (name === "approve" && kind !== "publish") {
         const nextKind = kinds[kinds.indexOf(kind) + 1];
         setKind(nextKind);
         setFile(fileChoices[nextKind]?.[0] ?? "");
@@ -310,8 +316,8 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
         setContent("");
         setSaved("");
       }
-      if (name === "approve" && kind === "render")
-        setNotice("Episode selesai dan video final telah disetujui.");
+      if (name === "approve" && kind === "publish")
+        setNotice("Episode siap dipublikasikan. Video, thumbnail, dan paket publikasi telah disetujui.");
     } catch (error) {
       setError(error instanceof Error ? error.message : "Permintaan gagal.");
     } finally {
@@ -383,7 +389,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
         <small>
           EP. {String(data.episode.id).padStart(3, "0")}
           <span>
-            {data.steps.filter((s) => s.status === "approved").length} dari 5
+            {data.steps.filter((s) => s.status === "approved").length} dari {data.steps.length}
             disetujui
           </span>
         </small>
@@ -515,7 +521,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                   </p>
                 </div>
               ) : documentMode === "preview" ? (
-                <DocumentMarkdown content={content} fileName={file} />
+                kind === "publish" ? <PublishPackPreview content={content} /> : <DocumentMarkdown content={content} fileName={file} />
               ) : (
                 <textarea
                   className="document-textarea"
@@ -545,6 +551,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
               </footer>
             </section>
           ) : null}
+          {kind === "thumbnail" ? <ThumbnailPreview key={step.finishedAt ?? "pending"} slug={slug} version={step.finishedAt} available={data.files.includes("05-thumbnail.svg")} /> : null}
           {kind === "voiceover" ? (
             <section className="audio-panel studio-panel">
               <header>
@@ -851,7 +858,11 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                       ? ["Narasi bertag", "Voice dan model"]
                       : kind === "scenes"
                         ? ["Paket episode", "Audio dan timestamp"]
-                        : ["Komposisi disetujui"]
+                        : kind === "thumbnail"
+                          ? ["Video final disetujui", "Visual episode"]
+                          : kind === "publish"
+                            ? ["Naskah dan video", "Thumbnail disetujui"]
+                            : ["Komposisi disetujui"]
                 ).map((name) => (
                   <div className="handoff-item" key={name}>
                     <FileText size={15} />
@@ -949,7 +960,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                   onClick={() => void action("approve")}
                 >
                   <Check />
-                  {kind === "render" ? "Setujui video" : "Setujui & lanjut"}
+                  {kind === "publish" ? "Setujui & selesaikan" : "Setujui & lanjut"}
                 </Button>
               ) : null}
             </>

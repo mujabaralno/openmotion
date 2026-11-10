@@ -31,7 +31,7 @@ export function seedProductionFiles(): void {
     if (!/^[a-z0-9.-]+\.md$/.test(name)) continue;
     copyMissing(path.join(skillSource, 'references', name), `agents/shorts-episode-parallax/references/${name}`);
   }
-  for (const name of ['script', 'tags', 'scenes']) copyMissing(path.join(process.cwd(), 'agents', 'prompts', `${name}.md`), `prompts/${name}.md`);
+  for (const name of ['script', 'tags', 'scenes', 'thumbnail', 'publish']) copyMissing(path.join(process.cwd(), 'agents', 'prompts', `${name}.md`), `prompts/${name}.md`);
   copyMissing(path.join(skillSource, 'references', 'style-bible.md'), 'guide/style-parallax.md');
 }
 export function buildStepPrompt(slug: string, kind: StepKind, notes: string): string {
@@ -47,9 +47,10 @@ export function buildStepPrompt(slug: string, kind: StepKind, notes: string): st
     guide: path.join(root, 'guide', 'style-parallax.md'), language: settings.language, captionsLanguage: settings.captionsLanguage, modelId: settings.modelId, skill,
     previous: previous ? artifactPath(previous.slug, '01-episode.md') : 'No previous approved episode. Establish the series constants.',
     package: artifactPath(slug, '01-episode.md'), narration: artifactPath(slug, '01-naskah.md'), tagged: artifactPath(slug, '02-naskah-tagged.md'),
+    thumbnail: artifactPath(slug, '05-thumbnail.svg'), publish: artifactPath(slug, '06-publish.md'), video: artifactPath(slug, `${slug}.mp4`, 'out'),
     audioMetadata: artifactPath(slug, '03-audio.json'), composition: artifactPath(slug, 'Episode.tsx', 'composition'), remotionProject: getRemotionProjectRoot(), audio: artifactPath(slug, 'audio.mp3', 'composition-public'), notes: notes ? `Revision notes from the creator:\n${notes}` : '',
   };
-  writeArtifact(slug, 'AGENTS.md', `# Episode workspace\n\nFollow the skill at ${skill}. Read its referenced documents as needed.\n\nOutput contract: stage script writes 01-episode.md with a fenced text block under the exact heading ## Master Voice-over. The app extracts 01-naskah.md. Stage tags writes only 02-naskah-tagged.md. Stage scenes works in the existing shared Remotion project at ${vars.remotionProject} and writes only ${vars.composition} with a default export. Do not create a Remotion project or install dependencies inside this episode workspace. Do not edit app-owned metadata, other episodes, credentials, or configuration. Audio and rendering are handled by the application.\n`);
+  writeArtifact(slug, 'AGENTS.md', `# Episode workspace\n\nFollow the skill at ${skill}. Read its referenced documents as needed.\n\nOutput contract: stage script writes 01-episode.md with a fenced text block under the exact heading ## Master Voice-over. The app extracts 01-naskah.md. Stage tags writes only 02-naskah-tagged.md. Stage scenes works in the existing shared Remotion project at ${vars.remotionProject} and writes only ${vars.composition} with a default export. Do not create a Remotion project or install dependencies inside this episode workspace. Do not edit app-owned metadata, other episodes, credentials, or configuration. Stage thumbnail reads the existing scene source and writes only 05-thumbnail.svg as self-contained static SVG. Stage publish reads approved artifacts and writes only 06-publish.md with sections ## Judul, ## Deskripsi, ## Hashtag. Audio and rendering are handled by the application.\n`);
   const template = fs.readFileSync(managedPath(root, `prompts/${kind}.md`), 'utf8');
   const rendered = template.replace(/\{\{([a-zA-Z_]+)\}\}/g, (_, key: string) => { if (!(key in vars)) throw new Error(`Variabel template belum tersedia: ${key}`); return vars[key]; });
   if (kind !== 'scenes') return rendered;

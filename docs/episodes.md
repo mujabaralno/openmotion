@@ -7,7 +7,7 @@ Fitur ini membuat dan membaca episode. Pengeditan dan penghapusan belum termasuk
 1. Buka `/` (dialihkan ke `/episodes`).
 2. Isi judul dan topik pada formulir **Episode baru**.
 3. Setelah disimpan, pengguna diarahkan ke `/episodes/<slug>`.
-4. Halaman daftar menampilkan semua episode beserta status lima langkah.
+4. Halaman daftar menampilkan semua episode beserta status tujuh langkah.
 5. Halaman detail menampilkan judul, topik, slug, waktu dibuat, dan status tiap langkah.
 
 ## API
@@ -51,7 +51,7 @@ Satu pembuatan episode menghasilkan:
 - satu baris `episodes` di SQLite;
 - folder `episodes/<slug>/`;
 - file `episodes/<slug>/episode.json`;
-- tepat lima baris `steps` dengan status `idle`: `script`, `tags`, `voiceover`, `scenes`, `render`.
+- tepat tujuh baris `steps` dengan status `idle`: `script`, `tags`, `voiceover`, `scenes`, `render`, `thumbnail`, `publish`.
 
 `episode.json` hanya menyimpan metadata dasar:
 
@@ -86,7 +86,7 @@ Urutan langkah selalu: Naskah, Tag emosi, Voice-over, Scene, Render.
 | Rute | Isi |
 |------|-----|
 | `/episodes` | Formulir episode baru dan daftar episode |
-| `/episodes/<slug>` | Detail episode dan status lima langkah |
+| `/episodes/<slug>` | Detail episode dan status tujuh langkah |
 
 Tampilan memakai utility Tailwind CSS. Formulir menonaktifkan tombol selama penyimpanan untuk mencegah pengiriman ganda. Pesan validasi, kegagalan penyimpanan, daftar kosong, dan episode tidak ditemukan ditampilkan dalam bahasa Indonesia.
 
@@ -98,7 +98,7 @@ npm test
 
 `tests/episodes.test.mts` memakai database dan workspace sementara dan mencakup:
 
-- Pembuatan episode, folder, `episode.json`, dan tepat lima langkah `idle`.
+- Pembuatan episode, folder, `episode.json`, dan tepat tujuh langkah `idle`.
 - Metadata file konsisten dengan baris database.
 - Judul sama menghasilkan slug/folder berbeda.
 - Benturan slug di database dan folder.

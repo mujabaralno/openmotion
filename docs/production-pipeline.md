@@ -9,6 +9,8 @@
 | voiceover | Narasi bertag, Voice ID, model | MP3, metadata durasi audio sebenarnya, alignment bila tersedia |
 | scenes | Paket lengkap, audio, timing, panduan | Default export `Episode.tsx`, preview berhasil dirender, manifest hash input |
 | render | Komposisi yang disetujui dan input yang sama | MP4 H.264 1080×1920, 30 FPS |
+| thumbnail | Video disetujui, source visual, naskah | `05-thumbnail.svg`, SVG statis 1080×1920 yang tervalidasi |
+| publish | Video, thumbnail, naskah yang disetujui | `06-publish.md` dengan judul, deskripsi, hashtag |
 
 Status: `idle → running → review → approved`, atau `failed`. Tahap baru membutuhkan semua tahap sebelumnya approved. Kegagalan dapat diulang. Revisi mengembalikan target dan tahap setelahnya ke idle. Revisi dari tahap render membuka kembali scenes. Edit manual membatalkan persetujuan downstream dan memerlukan review ulang.
 
@@ -18,7 +20,7 @@ Status: `idle → running → review → approved`, atau `failed`. Tahap baru me
 - `data/settings.json`: agen utama, Voice ID/model, seri, bahasa narasi/caption, pilihan timestamp. Tidak berisi key API.
 - `workspace/agents.json`: perintah ACP yang sudah login. Gunakan mode manual yang sesuai kemampuan agen.
 - `workspace/agents/shorts-episode-parallax`: salinan skill dan referensi dari repo. Template dan guide juga disalin jika belum ada. File pengguna tidak ditimpa.
-- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{remotionProject}}`, `{{audio}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
+- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{remotionProject}}`, `{{audio}}`, `{{video}}`, `{{thumbnail}}`, `{{publish}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
 
 Master narasi di paket menggunakan heading persis `## Master Voice-over` dan blok kode `text`. Hanya isi blok menjadi `01-naskah.md`. Angka jumlah kata dan catatan estimasi harus berada di luar blok. Agen mengikuti berkas skill secara eksplisit, tidak bergantung pada pemanggilan `$skill` khusus editor tertentu.
 
@@ -31,7 +33,7 @@ Model dan effort disimpan pada kolom `steps.model_id` dan `steps.effort` melalui
 - `GET /api/episodes/:slug/pipeline`: status, metadata, ketersediaan artefak, pekerjaan aktif.
 - `POST .../approve`, `.../revise` dengan `notes`, dan `.../cancel`: tindakan produksi.
 - `POST .../steps/:kind/options` dengan `agentId` dan opsional `modelId`: sesi singkat untuk membaca katalog model/effort tanpa prompt; proses ditutup setelah pembacaan atau ketika request dibatalkan.
-- `GET/PUT /api/episodes/:slug/files/:name`: tiga file teks yang diizinkan.
+- `GET/PUT /api/episodes/:slug/files/:name`: empat file teks yang diizinkan.
 - `GET/HEAD /api/media/:slug/:name`: MP3, preview, final MP4; mendukung satu byte range dan unduhan.
 - `GET/PUT /api/settings`: pengaturan, agen, template, guide. Pengubahan ditolak selama pekerjaan pipeline aktif.
 - `PUT /api/settings` dengan `preset`: menambahkan preset agen dengan mempertahankan konfigurasi asli di server. Tidak menimpa agen yang sudah terdaftar.
@@ -65,3 +67,11 @@ Restart menandai langkah dan job render yang masih running sebagai failed. Pemul
 Pengujian otomatis tersedia melalui `npm test`, `npm run test:security`, `npm run test:pipeline`, dan `npm run test:dashboard`. Semua pengujian runtime memakai database/workspace sementara. Pipeline diuji dari topik sampai MP4 1080×1920 dengan audio: agen dan respons ElevenLabs disimulasikan, sedangkan decoding audio, bundling, preview, dan render final dijalankan sungguhan. Pengubahan komposisi setelah preview ditolak; penolakan izin, pembatalan, revisi, serta audio lama ketika provider gagal ikut diperiksa.
 
 Pemeriksaan akun asli dan kualitas keluaran model tetap dilakukan terpisah. Hasil rinci pengujian dicatat di `docs/testing.md`.
+
+## Pascaproduksi
+
+Setelah render final disetujui, langkah `thumbnail` menggunakan agen ACP untuk membaca paket/narasi dan source `Episode.tsx`, lalu mengadaptasi bentuk, karakter, dan warna menjadi `05-thumbnail.svg` statis 1080×1920. Aplikasi memvalidasi XML dan hanya mengizinkan elemen/atribut gambar mandiri, tanpa script, animasi, style, font atau sumber eksternal. Media SVG divalidasi lagi saat diakses dan disajikan dengan CSP sandbox. Thumbnail tersedia untuk preview dan unduhan SVG; konversi PNG serta unggah ke platform belum disediakan.
+
+Langkah `publish` menulis `06-publish.md` dengan bagian `## Judul` (satu baris, maksimal 100 karakter), `## Deskripsi` (maksimal 5000 karakter), dan `## Hashtag` (1–15 hashtag unik). UI menyediakan preview, editor Markdown, dan tombol salin terpisah. Kedua tahap mendukung pilihan agen/model/effort, izin, pembatalan, persetujuan, dan revisi. Tidak ada publikasi otomatis.
+
+Revisi thumbnail membatalkan persetujuan thumbnail dan publikasi. Revisi publikasi hanya memengaruhi publikasi. Episode baru maupun hasil migrasi memiliki tujuh langkah; hanya tahap publikasi yang disetujui menandai seluruh episode selesai.

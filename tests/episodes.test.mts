@@ -92,7 +92,7 @@ test("membuat slug aman dari judul", () => {
   assert.equal(longSlug.endsWith("-"), false);
 });
 
-test("membuat episode, folder, episode.json, dan lima langkah idle", () => {
+test("membuat episode, folder, episode.json, dan tujuh langkah idle", () => {
   withFixture(({ db, workspaceRoot }) => {
     const now = new Date("2026-01-02T03:04:05.000Z");
     const episode = createEpisode(
@@ -107,11 +107,11 @@ test("membuat episode, folder, episode.json, dan lima langkah idle", () => {
     assert.equal(episode.updatedAt, now.toISOString());
     assert.deepEqual(
       episode.steps.map((step) => step.kind),
-      ["script", "tags", "voiceover", "scenes", "render"],
+      ["script", "tags", "voiceover", "scenes", "render", "thumbnail", "publish"],
     );
     assert.deepEqual(
       episode.steps.map((step) => step.status),
-      ["idle", "idle", "idle", "idle", "idle"],
+      Array(7).fill("idle"),
     );
 
     const row = db
@@ -146,6 +146,8 @@ test("membuat episode, folder, episode.json, dan lima langkah idle", () => {
       { kind: "voiceover", status: "idle" },
       { kind: "scenes", status: "idle" },
       { kind: "render", status: "idle" },
+      { kind: "thumbnail", status: "idle" },
+      { kind: "publish", status: "idle" },
     ]);
 
     const directory = episodeDirectory(workspaceRoot, episode.slug);
@@ -285,6 +287,8 @@ test("membaca status langkah dari SQLite, bukan dari file metadata", () => {
         "voiceover:idle",
         "scenes:idle",
         "render:failed",
+        "thumbnail:idle",
+        "publish:idle",
       ],
     );
     assert.deepEqual(listed.steps, detail.steps);
@@ -317,7 +321,7 @@ test("data episode dan status tetap ada setelah database dibuka ulang", () => {
     assert.equal(loaded.topic, "Tetap ada");
     assert.deepEqual(
       loaded.steps.map((step) => step.status),
-      ["approved", "idle", "idle", "idle", "idle"],
+      ["approved", ...Array(6).fill("idle")],
     );
     assert.equal(
       fs.existsSync(

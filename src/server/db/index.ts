@@ -8,15 +8,8 @@ export const DEFAULT_DATABASE_PATH = path.join(
   "app.db",
 );
 
-export const STEP_KINDS = [
-  "script",
-  "tags",
-  "voiceover",
-  "scenes",
-  "render",
-] as const;
-
-export type StepKind = (typeof STEP_KINDS)[number];
+import { STEP_KINDS } from '../../lib/pipeline-steps.ts';
+export { STEP_KINDS, type StepKind } from '../../lib/pipeline-steps.ts';
 
 export const STEP_STATUSES = [
   "idle",
@@ -34,7 +27,7 @@ type Migration = {
   up: (db: Database.Database) => void;
 };
 
-const stepKindList = STEP_KINDS.map((kind) => `'${kind}'`).join(", ");
+const stepKindList = STEP_KINDS.slice(0, 5).map((kind) => `'${kind}'`).join(", ");
 const stepStatusList = STEP_STATUSES.map((status) => `'${status}'`).join(", ");
 
 const MIGRATIONS: readonly Migration[] = [
@@ -128,6 +121,28 @@ const MIGRATIONS: readonly Migration[] = [
       for (const column of ['model_id', 'effort']) {
         if (!columns.some(existing => existing.name === column)) db.exec(`ALTER TABLE steps ADD COLUMN ${column} TEXT`);
       }
+    },
+  },
+  {
+    version: 4,
+    name: 'thumbnail-and-publish-steps',
+    up(db) {
+      const kinds = STEP_KINDS.map(kind => `'${kind}'`).join(', ');
+      db.exec(`
+        DROP TRIGGER IF EXISTS steps_validate_kind_status_insert;
+        DROP TRIGGER IF EXISTS steps_validate_kind_status_update;
+        CREATE TRIGGER steps_validate_kind_status_insert BEFORE INSERT ON steps
+        FOR EACH ROW WHEN NEW.kind NOT IN (${kinds}) OR NEW.status NOT IN (${stepStatusList})
+        BEGIN SELECT RAISE(ABORT, 'invalid step kind or status'); END;
+        CREATE TRIGGER steps_validate_kind_status_update BEFORE UPDATE OF kind, status ON steps
+        FOR EACH ROW WHEN NEW.kind NOT IN (${kinds}) OR NEW.status NOT IN (${stepStatusList})
+        BEGIN SELECT RAISE(ABORT, 'invalid step kind or status'); END;
+      `);
+      const insert = db.prepare(`INSERT INTO steps (episode_id, kind, status)
+        SELECT id, ?, 'idle' FROM episodes WHERE NOT EXISTS (
+          SELECT 1 FROM steps WHERE episode_id = episodes.id AND kind = ?
+        )`);
+      for (const kind of ['thumbnail', 'publish']) insert.run(kind, kind);
     },
   },
 ];

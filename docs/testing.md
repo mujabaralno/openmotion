@@ -13,7 +13,7 @@ Pengujian dilakukan pada 10 November 2026 dengan Node.js 24.15.0, Next.js 16.4.6
 
 ## Cakupan runtime
 
-- Topik saja membuat episode dan lima langkah produksi.
+- Topik saja membuat episode dan tujuh langkah produksi.
 - Agen ACP fixture mengalirkan teks dan meminta izin sebelum menulis artefak. Penolakan tidak menulis file; pembatalan mengakhiri pekerjaan.
 - Paket episode menghasilkan master narasi; perubahan kata pada tahap tag ditolak. Revisi membuka ulang tahap berikutnya.
 - Respons ElevenLabs disimulasikan. MP3 sungguhan dibaca durasinya, disiapkan untuk Remotion, dan dipakai untuk preview serta render final.
@@ -46,3 +46,5 @@ Panel sesi yang diperbarui sudah diamati melalui Safari, termasuk percakapan/too
 ## Menjalankan ulang
 
 Jalankan perintah pada tabel dari root repo. `test:pipeline` membutuhkan dependensi dalam `remotion/`, serta `ffmpeg` dan `ffprobe` di PATH. Render pertama memerlukan jaringan untuk mengunduh browser Remotion. Build dashboard dapat memerlukan jaringan untuk font. `test:stream` merupakan alias pemeriksaan integrasi dashboard/SSE. Opsi `--keep` mempertahankan server sementara paling lama 15 menit untuk pemeriksaan browser; SIGINT/SIGTERM menutup dan membersihkannya lebih awal.
+
+Pascaproduksi: 118 tes otomatis lulus (1 tes render dilewati), termasuk migrasi episode lima tahap tanpa kehilangan persetujuan/permission_log, idempotensi migrasi, izin agen palsu, validasi SVG statis, format publikasi, penyimpanan editor, dan cakupan revisi. Typecheck serta lint lulus. Smoke build produksi menjalankan 43 pemeriksaan HTTP/SSE, termasuk tujuh tahap, katalog model untuk tahap baru, preview/unduhan SVG, penolakan SVG aktif, dan persistensi setelah restart. Kualitas thumbnail dari agen asli serta interaksi tampilan baru belum diuji secara visual.

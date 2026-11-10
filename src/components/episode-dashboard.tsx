@@ -98,7 +98,7 @@ export function EpisodeDashboard({
               </span>
               <span>
                 {featured.steps.filter((s) => s.status === "approved").length}{" "}
-                dari 5 langkah disetujui
+                dari {featured.steps.length} langkah disetujui
               </span>
             </div>
             <Link

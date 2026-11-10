@@ -13,6 +13,8 @@ const COMPACT_STEP_LABELS: Record<EpisodeStep["kind"], string> = {
   voiceover: "Voice",
   scenes: "Scene",
   render: "Render",
+  thumbnail: "Thumbnail",
+  publish: "Publikasi",
 };
 
 const STATUS_META: Record<
@@ -58,7 +60,7 @@ export function EpisodeSteps({ steps, compact = false }: EpisodeStepsProps) {
   if (compact) {
     return (
       <ul
-        className="grid grid-cols-5 gap-1.5"
+        className="grid grid-cols-7 gap-1.5"
         aria-label="Status langkah produksi"
       >
         {steps.map((step) => {

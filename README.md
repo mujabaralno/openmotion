@@ -4,7 +4,7 @@
 
 # OpenMotion
 
-Dashboard produksi Shorts lokal: topik → paket episode parallax → narasi bertag → voice-over ElevenLabs → rakit scene → render dan review. Setiap hasil ditinjau dan disetujui pengguna sebelum tahap berikutnya dibuka.
+Dashboard produksi Shorts lokal: topik → paket episode parallax → narasi bertag → voice-over ElevenLabs → rakit scene → render → thumbnail SVG → paket publikasi. Setiap hasil ditinjau dan disetujui pengguna sebelum tahap berikutnya dibuka.
 
 ## Menjalankan
 
@@ -36,6 +36,9 @@ Di **Pengaturan**:
 5. **Rakit scene:** agen menggambar visual Remotion berdasarkan paket episode dan audio sebenarnya. Aplikasi menghasilkan preview video 540×960 untuk review. Setujui atau beri catatan revisi.
 6. **Render:** hasil final 1080×1920, 30 FPS, H.264. Progres tersimpan. Putar, unduh, dan setujui video atau minta revisi yang membuka kembali tahap scene.
 
+7. **Thumbnail:** setelah video disetujui, agen membuat cover SVG 1080×1920 dari visual source episode. Tinjau preview, unduh SVG, lalu setujui atau minta revisi.
+8. **Paket publikasi:** agen menyiapkan judul, deskripsi, dan hashtag sesuai video dan thumbnail. Tinjau, edit bila perlu, salin tiap bagian, lalu setujui untuk menyelesaikan episode. Pengunggahan dilakukan sendiri.
+
 Setiap tahap dapat dibatalkan. Refresh browser menyambung ulang ke pekerjaan yang masih berjalan. Server restart menandai pekerjaan yang terputus sebagai gagal; prompt dan panggilan berbayar tidak diulang otomatis. Isi file tahap berikutnya dibaca dari workspace, bukan disalin kembali dari chat.
 
 Daftar model/effort dibaca dari agen lewat ACP tanpa mengirim prompt. Effort mengikuti model: tidak semua model menyediakan low/medium/high. Pilihan diterapkan sebelum prompt dan disimpan per tahap saat dijalankan. Mengganti model memuat ulang pilihan effort. Pilihan yang tidak didukung ditolak, sehingga tidak diam-diam kembali ke default. Tahap Tag emosi dan Rakit scene juga memiliki pilihan tersendiri; pilihan ini terpisah dari model ElevenLabs.
@@ -48,7 +51,7 @@ Preview menggunakan renderer lokal yang sama dengan hasil final. Render pertama 
 workspace/
   agents/shorts-episode-parallax/   # skill dan referensi
   agents.json                     # perintah ACP
-  prompts/                        # script.md, tags.md, scenes.md
+  prompts/                        # script.md, tags.md, scenes.md, thumbnail.md, publish.md
   guide/style-parallax.md
   episodes/<slug>/
     episode.json
@@ -60,6 +63,8 @@ workspace/
     03-voiceover.timestamps.json
     03-audio.json                 # durasi audio terukur
     04-scenes.json                # manifest preview dan sidik input
+    05-thumbnail.svg              # cover statis dari visual episode
+    06-publish.md                 # judul, deskripsi, hashtag
     logs/<kind>.jsonl
     out/preview.mp4
     out/<slug>.mp4
@@ -112,3 +117,5 @@ Tes pipeline dan dashboard memakai database serta workspace sementara. `test:pip
 `test:dashboard` membangun aplikasi produksi dan memeriksa halaman, API, SSE, izin, editor, media range, serta persistensi setelah restart. `test:stream` menjalankan pemeriksaan integrasi yang sama. Akun agen/ElevenLabs asli dan mutu naskah/visual dari model tetap perlu diuji dengan konfigurasi pengguna.
 
 Dokumen teknis tambahan ada di `docs/production-pipeline.md`, `docs/permissions.md`, dan `docs/agents.md`.
+
+Dua tahap pascaproduksi ditambahkan otomatis ke episode lama melalui migrasi database, tanpa mengubah persetujuan atau file yang sudah ada. Revisi thumbnail membuka ulang thumbnail dan publikasi; revisi publikasi hanya membuka tahap publikasi. Revisi video tetap membuka ulang scene dan seluruh tahap setelahnya.

@@ -6,6 +6,8 @@ export const STEP_LABELS: Record<StepKind, string> = {
   voiceover: "Voice-over",
   scenes: "Rakit scene",
   render: "Render",
+  thumbnail: "Thumbnail",
+  publish: "Publikasi",
 };
 
 export const STATUS_LABELS: Record<StepStatus, string> = {

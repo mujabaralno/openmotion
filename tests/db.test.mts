@@ -14,6 +14,7 @@ const EXPECTED_MIGRATIONS = [
   { version: 1, name: "initial-schema" },
   { version: 2, name: "pipeline-revision-notes" },
   { version: 3, name: "step-model-and-effort" },
+  { version: 4, name: "thumbnail-and-publish-steps" },
 ];
 
 const LEGACY_SCHEMA = `
@@ -292,7 +293,7 @@ test("menyimpan data dan membacanya kembali setelah koneksi dibuka ulang", () =>
             .prepare("SELECT COUNT(*) AS count FROM schema_migrations")
             .get() as { count: number }
         ).count,
-        3,
+        EXPECTED_MIGRATIONS.length,
       );
     } finally {
       second.close();
@@ -422,6 +423,8 @@ test("hanya menerima kind dan status langkah yang diizinkan", () => {
         "voiceover",
         "scenes",
         "render",
+        "thumbnail",
+        "publish",
       ]);
       assert.deepEqual(STEP_STATUSES, [
         "idle",
@@ -562,7 +565,11 @@ test("migrasi memperbarui database setup sebelumnya tanpa kehilangan data", () =
       );
       assert.deepEqual(
         db.prepare("SELECT kind, status, notes, model_id, effort FROM steps").all(),
-        [{ kind: "script", status: "approved", notes: "", model_id: null, effort: null }],
+        [
+          { kind: "script", status: "approved", notes: "", model_id: null, effort: null },
+          { kind: "thumbnail", status: "idle", notes: "", model_id: null, effort: null },
+          { kind: "publish", status: "idle", notes: "", model_id: null, effort: null },
+        ],
       );
       assert.deepEqual(
         db.prepare("SELECT request_summary, decision FROM permission_log").all(),
@@ -597,6 +604,36 @@ test("migrasi memperbarui database setup sebelumnya tanpa kehilangan data", () =
       );
     } finally {
       db.close();
+    }
+  });
+});
+
+test('migration adds post-production to an existing five-step episode without changing approvals or permission history', () => {
+  withTempDirectory(directory => {
+    const file = path.join(directory, 'five-step.db');
+    const legacy = createDatabase(file);
+    const episodeId = insertEpisode(legacy);
+    const insert = legacy.prepare("INSERT INTO steps (episode_id, kind, status) VALUES (?, ?, 'approved')");
+    for (const kind of STEP_KINDS.slice(0, 5)) insert.run(episodeId, kind);
+    const oldRows = legacy.prepare('SELECT * FROM steps ORDER BY id').all();
+    const firstId = (oldRows[0] as { id: number }).id;
+    legacy.prepare("INSERT INTO permission_log (step_id, request_summary, decision) VALUES (?, 'keep', 'approved')").run(firstId);
+    legacy.prepare('DELETE FROM schema_migrations WHERE version=4').run();
+    legacy.exec(`DROP TRIGGER steps_validate_kind_status_insert;
+      DROP TRIGGER steps_validate_kind_status_update;
+      CREATE TRIGGER steps_validate_kind_status_insert BEFORE INSERT ON steps
+      WHEN NEW.kind NOT IN ('script','tags','voiceover','scenes','render')
+      BEGIN SELECT RAISE(ABORT, 'legacy kinds only'); END;`);
+    legacy.close();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const db = createDatabase(file);
+      try {
+        assert.deepEqual(db.prepare("SELECT * FROM steps WHERE kind NOT IN ('thumbnail','publish') ORDER BY id").all(), oldRows);
+        assert.deepEqual(db.prepare("SELECT kind, status FROM steps WHERE kind IN ('thumbnail','publish') ORDER BY id").all(), [{ kind: 'thumbnail', status: 'idle' }, { kind: 'publish', status: 'idle' }]);
+        assert.equal((db.prepare('SELECT count(*) AS n FROM permission_log WHERE step_id=?').get(firstId) as {n:number}).n, 1);
+        db.prepare("UPDATE steps SET status='review' WHERE kind='thumbnail'").run();
+        db.prepare("UPDATE steps SET status='idle' WHERE kind='thumbnail'").run();
+      } finally { db.close(); }
     }
   });
 });

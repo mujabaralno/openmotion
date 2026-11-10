@@ -7,10 +7,10 @@
 | Area | Folder | File yang diizinkan |
 |------|--------|---------------------|
 | `root` | workspace | `agents.json` |
-| `prompts` | `prompts/` | `script.md`, `tags.md`, `scenes.md` |
+| `prompts` | `prompts/` | `script.md`, `tags.md`, `scenes.md`, `thumbnail.md`, `publish.md` |
 | `guide` | `guide/` | `style-parallax.md` |
-| `episode` | `episodes/<slug>/` | `episode.json`, `01-naskah.md`, `02-naskah-tagged.md`, `03-voiceover.mp3`, `03-voiceover.timestamps.json` |
-| `logs` | `episodes/<slug>/logs/` | `script.jsonl`, `tags.jsonl`, `voiceover.jsonl`, `scenes.jsonl`, `render.jsonl` |
+| `episode` | `episodes/<slug>/` | `episode.json`, `01-naskah.md`, `02-naskah-tagged.md`, `03-voiceover.mp3`, `03-voiceover.timestamps.json`, `05-thumbnail.svg`, `06-publish.md` |
+| `logs` | `episodes/<slug>/logs/` | `script.jsonl`, `tags.jsonl`, `voiceover.jsonl`, `scenes.jsonl`, `render.jsonl`, `thumbnail.jsonl`, `publish.jsonl` |
 | `out` | `episodes/<slug>/out/` | `<slug>.mp4` (nama diturunkan dari slug, bukan bebas) |
 
 Area `episode`, `logs`, dan `out` wajib menyertakan `episodeSlug`. Area lain tidak memakai slug.

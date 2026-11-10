@@ -37,10 +37,10 @@ for await (const line of readline.createInterface({ input: process.stdin })) {
     if (process.argv.includes('--expect-config') && (model !== 'fast' || effort !== 'low')) { send({ id: message.id, error: { code: -32602, message: 'Prompt used the wrong model/effort' } }); continue; }
     fs.writeFileSync(path.join(cwd, 'test-execution.json'), JSON.stringify({ model, effort }));
     const text = message.params.prompt.map(block => block.text ?? '').join('');
-    const stage = text.startsWith('Create the complete') ? 'script' : text.startsWith('Prepare narration') ? 'tags' : 'scenes';
-    const filename = stage === 'script' ? '01-episode.md' : stage === 'tags' ? '02-naskah-tagged.md' : text.match(/^SCENE_OUTPUT_FILE: (.+)$/m)?.[1];
+    const stage = text.startsWith('Create the complete') ? 'script' : text.startsWith('Prepare narration') ? 'tags' : text.startsWith('Create a static SVG') ? 'thumbnail' : text.startsWith('Create the publication pack') ? 'publish' : 'scenes';
+    const filename = stage === 'script' ? '01-episode.md' : stage === 'tags' ? '02-naskah-tagged.md' : stage === 'thumbnail' ? '05-thumbnail.svg' : stage === 'publish' ? '06-publish.md' : text.match(/^SCENE_OUTPUT_FILE: (.+)$/m)?.[1];
     if (!filename || (stage === 'scenes' && !filename.startsWith(path.join(cwd, 'src', 'episodes') + path.sep))) { send({ id: message.id, error: { code: -32602, message: 'Scene source is outside the shared project' } }); continue; }
-    pending = { promptId: message.id, filename, content: stage === 'script' ? packet : stage === 'tags' ? '[curious] A short local test.\n' : scene };
+    pending = { promptId: message.id, filename, content: stage === 'script' ? packet : stage === 'tags' ? '[curious] A short local test.\n' : stage === 'thumbnail' ? '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920"><rect width="1080" height="1920" fill="#79c8ef"/><circle cx="300" cy="400" r="110" fill="#ffe18a"/></svg>' : stage === 'publish' ? '## Judul\nWhy shadows grow\n\n## Deskripsi\nA short local episode about shadows.\n\n## Hashtag\n#Shadows #Science #Shorts\n' : scene };
     for (const text of ['Preparing ', 'local episode.']) {
       send({ method: 'session/update', params: { sessionId: 'pipeline-test', update: { sessionUpdate: 'agent_message_chunk', content: { type: 'text', text } } } });
       if (delayMs > 0) await new Promise(resolve => setTimeout(resolve, delayMs));

@@ -8,7 +8,7 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
   try {
     const { slug, kind } = await context.params;
     stepParams(slug, kind);
-    if (!['script', 'tags', 'scenes'].includes(kind)) throw new Error('Langkah ini tidak memakai model agen.');
+    if (!['script', 'tags', 'scenes', 'thumbnail', 'publish'].includes(kind)) throw new Error('Langkah ini tidak memakai model agen.');
     const view = pipelineView(slug);
     if (view.task || view.steps.some(step => step.status === 'running')) throw new Error('Tunggu atau batalkan pekerjaan aktif sebelum memuat pilihan model.');
     const body = await bodyObject(request);

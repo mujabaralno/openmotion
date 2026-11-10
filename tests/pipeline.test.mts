@@ -47,7 +47,7 @@ async function waitFor<T>(read: () => T | undefined | false, timeout = 15000): P
   }
   throw new Error('Timed out waiting for pipeline state.');
 }
-async function permission(slug: string, kind: 'script' | 'tags' | 'scenes') {
+async function permission(slug: string, kind: 'script' | 'tags' | 'scenes' | 'thumbnail' | 'publish') {
   return waitFor(() => {
     const sub = subscribeStepStream({ episodeSlug: slug, kind, onEvent: () => {} });
     sub.unsubscribe();
@@ -62,7 +62,7 @@ async function finish(slug: string, kind: string, status = 'review', timeout = 1
     return step.status === status && !view.task;
   }, timeout);
 }
-async function agentStep(slug: string, kind: 'script' | 'tags' | 'scenes') {
+async function agentStep(slug: string, kind: 'script' | 'tags' | 'scenes' | 'thumbnail' | 'publish') {
   await runPipelineStep(slug, kind);
   const event = await permission(slug, kind);
   assert.equal(event.type, 'permission');
@@ -99,7 +99,7 @@ test('topic → approved packet → unchanged tagged narration, with permission 
   await agentStep(episode.slug, 'tags');
   approveStep(episode.slug, 'tags');
   reviseStep(episode.slug, 'script', 'Make the opening clearer.');
-  assert.deepEqual(getSteps(episode.slug).map(step => step.status), ['idle', 'idle', 'idle', 'idle', 'idle']);
+  assert.deepEqual(getSteps(episode.slug).map(step => step.status), Array(7).fill('idle'));
   assert.match(buildStepPrompt(episode.slug, 'script', getSteps(episode.slug)[0].notes), /Make the opening clearer/);
   await runPipelineStep(episode.slug, 'script');
   await permission(episode.slug, 'script');
@@ -150,7 +150,7 @@ test('complete production pipeline: stubbed ElevenLabs, actual MP3 probe, previe
     await runPipelineStep(episode.slug, 'render');
     await finish(episode.slug, 'render', 'review', 180000);
     approveStep(episode.slug, 'render');
-    assert.deepEqual(getSteps(episode.slug).map(step => step.status), Array(5).fill('approved'));
+    assert.deepEqual(getSteps(episode.slug).slice(0, 5).map(step => step.status), Array(5).fill('approved'));
     assert.equal(pipelineView(episode.slug).renderJob!.status, 'completed');
     const video = artifactPath(episode.slug, `${episode.slug}.mp4`, 'out');
     const probe = spawnSync('ffprobe', ['-v', 'error', '-show_entries', 'stream=codec_type,width,height:format=duration', '-of', 'json', video]);
@@ -160,7 +160,7 @@ test('complete production pipeline: stubbed ElevenLabs, actual MP3 probe, previe
     assert.ok(media.streams.some((stream: { width: number; height: number }) => stream.width === 1080 && stream.height === 1920));
     assert.ok(Number(media.format.duration) >= 3.5);
     reviseStep(episode.slug, 'render', 'Adjust the scene.');
-    assert.deepEqual(getSteps(episode.slug).slice(3).map(step => step.status), ['idle', 'idle']);
+    assert.deepEqual(getSteps(episode.slug).slice(3).map(step => step.status), Array(4).fill('idle'));
     reviseStep(episode.slug, 'voiceover', 'Regenerate audio.');
     await assert.rejects(runPipelineStep(episode.slug, 'voiceover'), /Konfirmasi penimpaan/);
     assert.equal(requests, 1);
@@ -245,4 +245,41 @@ test('preparing a new scene does not create an entry importing a missing visual 
   writeArtifact(episode.slug, 'Episode.tsx', 'export default function Episode(){return null;}', 'composition');
   prepareComposition(episode.slug);
   assert.equal(fs.existsSync(artifactPath(episode.slug, 'index.tsx', 'composition')), true);
+});
+
+test('post-production gates, permission decisions, publication editing, and scoped revisions', async () => {
+  const episode = createEpisode({ title: 'Post production', topic: 'Why shadows grow' });
+  await assert.rejects(runPipelineStep(episode.slug, 'thumbnail'), /Setujui/);
+  await assert.rejects(runPipelineStep(episode.slug, 'publish'), /Setujui/);
+  // Pretend the existing production stages were approved, without paid API calls or a render.
+  getDb().prepare("UPDATE steps SET status='approved' WHERE episode_id=? AND kind IN ('script','tags','voiceover','scenes','render')").run(episode.id);
+  const prompt = buildStepPrompt(episode.slug, 'thumbnail', 'Use the opening scene');
+  assert.ok(prompt.includes(artifactPath(episode.slug, 'Episode.tsx', 'composition')));
+  assert.match(prompt, /Use the opening scene/);
+  assert.match(prompt, /self-contained/);
+  await runPipelineStep(episode.slug, 'thumbnail');
+  const event = await permission(episode.slug, 'thumbnail');
+  if (event.type === 'permission') await decidePermission(event.permission.id, 'reject');
+  await waitFor(() => getSteps(episode.slug)[5].status === 'failed' && !pipelineView(episode.slug).task);
+  assert.equal(fs.existsSync(artifactPath(episode.slug, '05-thumbnail.svg')), false);
+  await agentStep(episode.slug, 'thumbnail');
+  const svg = readArtifact(episode.slug, '05-thumbnail.svg');
+  writeArtifact(episode.slug, '05-thumbnail.svg', '<svg><script/></svg>');
+  assert.throws(() => approveStep(episode.slug, 'thumbnail'), /SVG/);
+  writeArtifact(episode.slug, '05-thumbnail.svg', svg);
+  approveStep(episode.slug, 'thumbnail');
+  await agentStep(episode.slug, 'publish');
+  approveStep(episode.slug, 'publish');
+  assert.ok(getSteps(episode.slug).every(step => step.status === 'approved'));
+  const original = readArtifact(episode.slug, '06-publish.md');
+  assert.throws(() => saveTextArtifact(episode.slug, '06-publish.md', 'Missing sections'), /bagian/);
+  assert.equal(readArtifact(episode.slug, '06-publish.md'), original);
+  assert.equal(getSteps(episode.slug)[6].status, 'approved');
+  saveTextArtifact(episode.slug, '06-publish.md', original.replace('Why shadows grow', 'Why shadows change'));
+  assert.equal(getSteps(episode.slug)[6].status, 'review');
+  assert.ok(getSteps(episode.slug).slice(0, 6).every(step => step.status === 'approved'));
+  approveStep(episode.slug, 'publish');
+  reviseStep(episode.slug, 'thumbnail', 'Make the subject larger.');
+  assert.deepEqual(getSteps(episode.slug).map(step => step.status), [...Array(5).fill('approved'), 'idle', 'idle']);
+  assert.equal(readArtifact(episode.slug, '05-thumbnail.svg'), svg);
 });
