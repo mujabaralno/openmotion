@@ -33,13 +33,17 @@ Buka <http://127.0.0.1:3000>. Aplikasi sengaja terikat ke `127.0.0.1`, jadi tida
 
 ## Database
 
-Database SQLite dibuat otomatis saat server pertama kali berjalan, di `data/app.db`. Folder `data/` tidak di-commit. Tabel awal: `episodes`, `steps`, `permission_log`, dan `render_jobs`.
+Database SQLite dibuat otomatis saat server pertama kali berjalan, di `data/app.db`. Folder `data/` tidak di-commit. Tabel: `episodes`, `steps`, `permission_log`, dan `render_jobs`; perubahan skema dicatat di `schema_migrations`.
 
-Untuk memastikan database bisa ditulis dan dibaca:
+Nilai `steps.kind` dan `steps.status` dibatasi oleh trigger sesuai dokumen. Status aplikasi tersimpan permanen, sedangkan transkrip agen tetap berupa file `logs/<kind>.jsonl` di folder episode.
+
+Untuk memastikan database, migrasi, dan hubungan antartabel bekerja:
 
 ```bash
 npm test
 ```
+
+Skema lengkap, aturan migrasi, dan cara menambah migrasi berikutnya ada di [`docs/database.md`](docs/database.md).
 
 ## Remotion
 
@@ -58,7 +62,7 @@ npm run render     # render contoh ke out/example.mp4
 src/app/              halaman Next.js (App Router)
 src/app/api/          route handler API
 src/proxy.ts          guard keamanan untuk seluruh /api/*
-src/server/db/        koneksi dan skema SQLite
+src/server/db/        koneksi, skema, dan migrasi SQLite
 src/server/security/  aturan Host/Origin dan token
 src/server/workspace/ penjaga path dan whitelist file workspace
 tests/                tes unit
