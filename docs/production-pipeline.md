@@ -18,7 +18,7 @@ Status: `idle → running → review → approved`, atau `failed`. Tahap baru me
 - `data/settings.json`: agen utama, Voice ID/model, seri, bahasa narasi/caption, pilihan timestamp. Tidak berisi key API.
 - `workspace/agents.json`: perintah ACP yang sudah login. Gunakan mode manual yang sesuai kemampuan agen.
 - `workspace/agents/shorts-episode-parallax`: salinan skill dan referensi dari repo. Template dan guide juga disalin jika belum ada. File pengguna tidak ditimpa.
-- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
+- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{remotionProject}}`, `{{audio}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
 
 Master narasi di paket menggunakan heading persis `## Master Voice-over` dan blok kode `text`. Hanya isi blok menjadi `01-naskah.md`. Angka jumlah kata dan catatan estimasi harus berada di luar blok. Agen mengikuti berkas skill secara eksplisit, tidak bergantung pada pemanggilan `$skill` khusus editor tertentu.
 
@@ -40,7 +40,13 @@ Semua API melewati guard yang sama. Mutasi membutuhkan Origin dan token per-star
 
 ## Remotion
 
-Setiap episode mempunyai `remotion/Episode.tsx` sebagai visual agen. Server menghasilkan `index.tsx`, `props.json`, serta `public/audio.mp3`. Wrapper menjamin audio satu track utuh, caption, ukuran portrait, dan tiga detik end card. Props visual: durationInFrames, fps, audioDuration, title, dan words. Hanya impor React/Remotion diperlukan.
+Hanya ada satu proyek Remotion di `<repo>/remotion`, yang memiliki package.json, tsconfig.json, dan node_modules bersama. Source visual setiap episode ada di `<repo>/remotion/src/episodes/<slug>/Episode.tsx`. Server menghasilkan `index.tsx` dan `props.json` di folder source tersebut, serta audio/timestamp kerja di `<repo>/remotion/public/episodes/<slug>/`. Wrapper menggunakan `staticFile('episodes/<slug>/audio.mp3')`. Props visual: durationInFrames, fps, audioDuration, title, dan words. Hanya impor React/Remotion diperlukan.
+
+Proses agen untuk tahap scenes dijalankan dengan cwd proyek Remotion utama. Script dan tags tetap memakai folder workspace episode. Penemuan model untuk scenes menggunakan cwd yang sama dengan eksekusinya. Jalur ini ditentukan aplikasi, bukan dari path bebas pada body API.
+
+Props dan audio disiapkan sebelum agen bekerja. Entry final dibuat setelah `Episode.tsx` tersedia, sehingga episode yang masih menunggu source tidak menambahkan import yang belum dapat ditemukan ke proyek bersama.
+
+Folder `workspace/episodes/<slug>/remotion` lama tidak dihapus. Saat prepare, `Episode.tsx` lama disalin hanya jika source baru belum ada. Entry, props, dan salinan audio kemudian disiapkan di proyek utama. Source baru yang sudah ada tidak ditimpa migrasi; naskah, audio asli, log, output, dan status persetujuan tidak dihapus. Preview lama yang tidak cocok dengan hash entry baru perlu dibuat dan ditinjau ulang.
 
 Worker Node di `scripts/render-episode.mjs` memuat dependensi dari repo `remotion/`, membundle entry episode, dan menjalankan renderer. Probe MP3 memakai Mediabunny. Preview setengah ukuran memakai CRF 28; final memakai CRF 18. Satu renderer aktif; permintaan ketika sibuk ditolak dengan pesan yang dapat dicoba ulang. Identitas proses turunan terpisah agar pembatalan dan shutdown dapat menghentikan seluruh grup.
 

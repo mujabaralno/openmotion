@@ -22,6 +22,7 @@ export type PermissionRecord = {
   summary: string;
   toolCallId?: string;
   toolKind?: string;
+  input?: unknown;
   options: AcpPermissionOption[];
   status: PermissionStatus;
   decision?: "approved" | "rejected";

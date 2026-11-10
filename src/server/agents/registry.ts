@@ -7,6 +7,7 @@ import {
   WorkspaceInitializationError,
 } from "../workspace/init.ts";
 import { resolveWorkspacePath } from "../workspace/paths.ts";
+import { getRemotionProjectRoot } from '../remotion/project.ts';
 
 export type AgentSessionStatus =
   | "starting"
@@ -35,6 +36,7 @@ export type StartAgentSessionInput = {
   episodeSlug: string;
   workspaceRoot?: string;
   stdio?: "ignore" | "pipe";
+  workingDirectory?: 'episode' | 'remotion';
 };
 
 export type AgentSessionErrorCode =
@@ -60,6 +62,7 @@ export class AgentSessionError extends Error {
 
 type AgentSessionEntry = AgentSessionSnapshot & {
   child: ChildProcess | null;
+  workingDirectory?: 'episode' | 'remotion';
 };
 
 type AgentRegistryState = {
@@ -179,12 +182,15 @@ export function startAgentSession(
   const agentId = validateIdentity(input.agentId, "agent");
   const episodeSlug = validateIdentity(input.episodeSlug, "episode");
   const state = getRegistryState();
+  const workingDirectory = input.workingDirectory ?? 'episode';
+  if (workingDirectory !== 'episode' && workingDirectory !== 'remotion') throw new AgentSessionError('invalid-session', 'Lokasi kerja agen tidak dikenal.');
   const existing = state.sessions.get(sessionId);
 
   if (existing) {
     if (
       existing.agentId !== agentId ||
-      existing.episodeSlug !== episodeSlug
+      existing.episodeSlug !== episodeSlug ||
+      (existing.workingDirectory ?? 'episode') !== workingDirectory
     ) {
       throw new AgentSessionError(
         "session-conflict",
@@ -234,10 +240,10 @@ export function startAgentSession(
     );
   }
 
-  const cwd = path.dirname(resolution.path);
+  const episodeDirectory = path.dirname(resolution.path);
 
   try {
-    if (!fs.statSync(cwd).isDirectory()) {
+    if (!fs.statSync(episodeDirectory).isDirectory()) {
       throw new AgentSessionError(
         "episode-not-found",
         `Folder episode "${episodeSlug}" tidak ditemukan.`,
@@ -256,6 +262,7 @@ export function startAgentSession(
     throw error;
   }
 
+  const cwd = workingDirectory === 'remotion' ? getRemotionProjectRoot() : episodeDirectory;
   const startedAt = new Date().toISOString();
   const entry: AgentSessionEntry = {
     sessionId,
@@ -270,6 +277,7 @@ export function startAgentSession(
     signal: null,
     error: null,
     child: null,
+    workingDirectory,
   };
 
   state.sessions.set(sessionId, entry);

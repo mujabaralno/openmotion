@@ -39,6 +39,8 @@
 
 # remotion
 /remotion/out/
+/remotion/src/episodes/
+/remotion/public/episodes/
 
 # debug
 npm-debug.log*
@@ -66,3 +68,7 @@ workflow.md
 .commandcode/
 
 design/
+
+agents/remotion-best-practices
+
+workspace/

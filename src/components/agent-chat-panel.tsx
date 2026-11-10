@@ -1,859 +1,112 @@
 "use client";
 
+import { memo, useEffect, useRef, useState } from "react";
 import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  AlertIcon,
-  CheckIcon,
-  ShieldIcon,
-  SparkIcon,
-  TerminalIcon,
-  WrenchIcon,
-  XIcon,
-} from "@/components/icons";
-import { cn } from "@/lib/utils";
-import { Badge } from "@/components/ui/badge";
-import { Bubble, BubbleContent } from "@/components/ui/bubble";
+  AlertTriangle, ArrowDown, Bot, Check, CheckCircle2, ChevronDown,
+  Clock3, Copy, FileText, RefreshCw, ShieldCheck, Square, Terminal, Wrench, X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  Item,
-  ItemActions,
-  ItemContent,
-  ItemDescription,
-  ItemMedia,
-  ItemTitle,
-} from "@/components/ui/item";
-import { Message, MessageContent } from "@/components/ui/message";
-import {
-  MessageScroller,
-  MessageScrollerButton,
-  MessageScrollerContent,
-  MessageScrollerItem,
-  MessageScrollerProvider,
-  MessageScrollerViewport,
-} from "@/components/ui/message-scroller";
 import { Switch } from "@/components/ui/switch";
-import {
-  Trace,
-  TraceDescription,
-  TraceIcon,
-  TraceLine,
-  TraceTitle,
-} from "@/components/ui/trace";
+import { DocumentMarkdown } from "@/components/document-markdown";
+import { LogoIntro } from "@/components/lottie";
+import { useAgentSession } from "@/hooks/use-agent-session";
+import { compactToolTitle, friendlySessionError, sessionPresentation, toolDisplayTitle, type SessionEntry } from "@/lib/agent-session";
 import { STEP_LABELS } from "@/lib/episode-labels";
-import type { AcpUpdate } from "@/server/acp/types";
-import type {
-  AgentStreamEvent,
-  AgentStreamStatus,
-  PermissionRecord,
-} from "@/server/agent-streams/types";
-import type { StepKind } from "@/server/db";
+import type { PermissionRecord } from "@/server/agent-streams/types";
+import type { StepKind, StepStatus } from "@/server/db";
 
-type ChatMessage = {
-  id: string;
-  role: "user" | "assistant";
-  text: string;
-};
-
-type ToolEntry = {
-  id: string;
-  title: string;
-  status: string;
-  kind?: string;
-  name?: string;
-};
-
-type ConnectionState =
-  | "connecting"
-  | "open"
-  | "reconnecting"
-  | "idle"
-  | "done"
-  | "error";
-
-const SESSION_LABELS: Record<AgentStreamStatus, string> = {
-  idle: "Belum ada sesi",
-  running: "Berjalan",
-  completed: "Selesai",
-  failed: "Gagal",
-};
-
-const CONNECTION_LABELS: Record<ConnectionState, string> = {
-  connecting: "Memuat riwayat",
-  open: "Tersambung",
-  reconnecting: "Menyambung ulang",
-  idle: "Tidak ada sesi",
-  done: "Selesai",
-  error: "Koneksi gagal",
-};
-
-type StatusTone = "accent" | "success" | "danger" | "warning" | "muted";
-
-const STATUS_TONE_CLASSES: Record<StatusTone, string> = {
-  accent: "border-primary/30 bg-primary/10 text-primary",
-  success: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
-  danger: "border-destructive/30 bg-destructive/10 text-destructive",
-  warning: "border-amber-500/25 bg-amber-500/10 text-amber-300",
-  muted: "border-white/10 bg-white/[0.03] text-muted-foreground",
-};
-
-function connectionTone(state: ConnectionState): StatusTone {
-  if (state === "error") return "danger";
-  if (state === "open") return "accent";
-  if (state === "connecting" || state === "reconnecting") return "warning";
-  if (state === "done") return "success";
-  return "muted";
+type Tool = Extract<SessionEntry, { type: "tool" }>;
+const toolStatus = (status: string) => ({ pending: "Menunggu", in_progress: "Berjalan", completed: "Selesai", failed: "Gagal" }[status] ?? status);
+function permissionStatus(permission: PermissionRecord) {
+  if (permission.status === "approved") return permission.decisionSource === "auto" ? "Disetujui otomatis" : "Disetujui";
+  return { pending: "Menunggu izin", rejected: "Ditolak", expired: "Sesi berakhir", failed: "Gagal" }[permission.status];
 }
-
-function sessionTone(status: AgentStreamStatus): StatusTone {
-  if (status === "failed") return "danger";
-  if (status === "completed") return "success";
-  if (status === "running") return "accent";
-  return "muted";
-}
-
-function StatusPill({
-  tone,
-  children,
-  pulse = false,
-}: {
-  tone: StatusTone;
-  children: ReactNode;
-  pulse?: boolean;
-}) {
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em]",
-        STATUS_TONE_CLASSES[tone],
-      )}
-    >
-      {pulse ? (
-        <span className="animate-soft-pulse size-1 rounded-full bg-current" />
-      ) : null}
-      {children}
-    </span>
-  );
-}
-
-function toolStatusLabel(status: string): string {
-  if (status === "pending") return "Menunggu";
-  if (status === "in_progress") return "Berjalan";
-  if (status === "completed") return "Selesai";
-  if (status === "failed") return "Gagal";
-  return status;
-}
-
-function traceStatus(
-  status: string,
-): "running" | "error" | "pending" | undefined {
-  if (status === "failed") return "error";
-  if (status === "pending") return "pending";
-  if (status === "in_progress") return "running";
-  return undefined;
-}
-
-function permissionStatusLabel(permission: PermissionRecord): string {
-  if (permission.status === "pending") return "Menunggu keputusan";
-  if (permission.status === "approved") {
-    return permission.decisionSource === "auto"
-      ? "Disetujui otomatis"
-      : "Disetujui";
+function readableInput(input: unknown): string {
+  if (typeof input === "string") return input;
+  if (input && typeof input === "object") {
+    const record = input as Record<string, unknown>;
+    if (typeof record.command === "string") return record.command;
+    const path = record.file_path ?? record.path;
+    if (typeof path === "string") return path + (typeof record.content === "string" ? `\n\n${record.content}` : "");
   }
-  if (permission.status === "rejected") return "Ditolak";
-  if (permission.status === "expired") return "Kedaluwarsa";
-  return "Gagal";
+  return input === undefined ? "" : JSON.stringify(input, null, 2);
 }
-
-function permissionTone(permission: PermissionRecord): StatusTone {
-  if (permission.status === "approved") return "success";
-  if (permission.status === "rejected" || permission.status === "failed") {
-    return "danger";
+function duration(start: string | null, end: string | null, now: number) {
+  if (!start) return null;
+  const seconds = Math.max(0, Math.floor(((end ? Date.parse(end) : now) - Date.parse(start)) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
+}
+function SessionError({ message }: { message: string }) {
+  const friendly = friendlySessionError(message);
+  return <div className="agent-error" role="alert"><AlertTriangle size={17} /><div><p>{friendly}</p>{message !== friendly ? <details><summary>Detail kesalahan</summary><pre>{message.replace(/\x1b\[[0-9;]*m/g, "")}</pre></details> : null}</div></div>;
+}
+const AgentMessage = memo(function AgentMessage({ text, streaming }: { text: string; streaming: boolean }) {
+  const [copied, setCopied] = useState(false);
+  async function copy() {
+    try { await navigator.clipboard.writeText(text); setCopied(true); } catch { setCopied(false); }
   }
-  if (permission.status === "pending") return "warning";
-  return "muted";
+  return <div className="agent-message"><div className="agent-message-author"><span className="agent-avatar"><Bot size={16} /></span><strong>Agen</strong>{streaming ? <span className="agent-message-live">Menulis</span> : null}</div><div className="agent-message-body">{streaming ? <div className="agent-streaming-text">{text}</div> : <DocumentMarkdown content={text} fileName="balasan agen" />}{!streaming ? <Button variant="ghost" size="xs" onClick={() => void copy()} aria-label="Salin balasan agen">{copied ? <Check size={13} /> : <Copy size={13} />}{copied ? "Tersalin" : "Salin"}</Button> : null}</div></div>;
+});
+function ToolActivity({ tool }: { tool: Tool }) {
+  const Icon = tool.kind === "execute" ? Terminal : tool.kind === "read" || tool.kind === "edit" ? FileText : Wrench;
+  return <details className="agent-tool" data-state={tool.status}><summary><span className="agent-tool-icon"><Icon size={15} /></span><span className="agent-tool-name" title={tool.title}>{toolDisplayTitle(tool)}</span><span className="agent-tool-status">{tool.status === "completed" ? <Check size={12} /> : tool.status === "failed" ? <X size={12} /> : null}{toolStatus(tool.status)}</span><ChevronDown size={13} className="agent-disclosure-arrow" /></summary><div className="agent-tool-detail"><p>{tool.title}</p>{tool.input !== undefined ? <pre>{readableInput(tool.input)}</pre> : null}{tool.output !== undefined ? <pre>{readableInput(tool.output)}</pre> : null}</div></details>;
 }
-
-function InlineError({ message }: { message: string }) {
-  return (
-    <div
-      className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
-      role="alert"
-    >
-      <AlertIcon className="mt-0.5 size-4 shrink-0" />
-      <p>{message}</p>
-    </div>
-  );
+function PermissionCard({ permission, deciding, connected, onDecide }: { permission: PermissionRecord; deciding: boolean; connected: boolean; onDecide: (id: string, decision: "approve" | "reject") => void }) {
+  const input = readableInput(permission.input);
+  return <article className="agent-permission"><div className="agent-permission-heading"><ShieldCheck size={18} /><div><strong>{compactToolTitle(permission.title)}</strong><p>Periksa tindakan ini sebelum memberi izin.</p></div></div>{input ? <pre className="agent-permission-input">{input}</pre> : null}<details className="agent-permission-details"><summary>Detail tindakan</summary><pre>{permission.summary}</pre></details>{permission.error ? <p className="agent-permission-error">{permission.error}</p> : null}<div className="agent-permission-actions"><span>{!connected ? "Menunggu koneksi tersambung" : deciding ? "Menyimpan keputusan…" : "Izin berlaku sekali untuk tindakan ini"}</span><div><Button variant="outline" disabled={deciding || !connected} onClick={() => onDecide(permission.id, "reject")}><X size={14} />Tolak</Button><Button disabled={deciding || !connected} onClick={() => onDecide(permission.id, "approve")}><Check size={14} />{deciding ? "Memproses…" : "Izinkan sekali"}</Button></div></div></article>;
 }
-
-function ConsoleEmptyState({
-  connection,
-}: {
-  connection: ConnectionState;
-}) {
-  if (connection === "connecting") {
-    return (
-      <div className="flex min-h-[18rem] flex-col justify-center gap-3 px-1">
-        <span className="h-3 w-28 animate-pulse rounded-full bg-white/10" />
-        <span className="h-3 w-4/5 animate-pulse rounded-full bg-white/[0.06]" />
-        <span className="h-3 w-3/5 animate-pulse rounded-full bg-white/[0.05]" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex min-h-[18rem] flex-col items-center justify-center px-6 text-center">
-      <span className="flex size-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-primary">
-        <TerminalIcon className="size-5" />
-      </span>
-      <p className="mt-4 text-sm font-medium text-foreground">
-        Console siap menerima sesi.
-      </p>
-      <p className="mt-1.5 max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
-        {connection === "reconnecting"
-          ? "Menyambung ulang ke riwayat sesi..."
-          : "Pilih agen dan kirim prompt. Riwayat sesi aktif akan muncul di sini."}
-      </p>
-    </div>
-  );
-}
-
-export function AgentStreamView({
-  episodeSlug,
-  kind,
-}: {
-  episodeSlug: string;
-  kind: StepKind;
-}) {
-  const [connection, setConnection] =
-    useState<ConnectionState>("connecting");
-  const [sessionStatus, setSessionStatus] =
-    useState<AgentStreamStatus>("idle");
-  const [attemptId, setAttemptId] = useState<string | null>(null);
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [tools, setTools] = useState<ToolEntry[]>([]);
-  const [error, setError] = useState<string | null>(null);
-  const [permissions, setPermissions] = useState<
-    Record<string, PermissionRecord>
-  >({});
-  const [autoApprove, setAutoApprove] = useState(false);
-  const [autoPending, setAutoPending] = useState(false);
-  const [deciding, setDeciding] = useState<Record<string, boolean>>({});
-
-  const sourceRef = useRef<EventSource | null>(null);
-  const seenRef = useRef(new Set<string>());
-  const attemptRef = useRef<string | null>(null);
-  const terminalRef = useRef(false);
-
+function Conversation({ entries, running }: { entries: SessionEntry[]; running: boolean }) {
+  const viewport = useRef<HTMLDivElement>(null);
+  const content = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  const [jump, setJump] = useState(false);
   useEffect(() => {
-    const source = new EventSource(
-      `/api/episodes/${encodeURIComponent(episodeSlug)}/steps/${kind}/stream`,
-    );
-    sourceRef.current = source;
-
-    const ensureAttempt = (nextAttemptId: string) => {
-      if (!nextAttemptId || attemptRef.current === nextAttemptId) return;
-
-      attemptRef.current = nextAttemptId;
-      seenRef.current.clear();
-      setAttemptId(nextAttemptId);
-      setMessages([]);
-      setTools([]);
-      setPermissions({});
-      setAutoApprove(false);
-      setError(null);
-      setSessionStatus("running");
-    };
-
-    const applyUpdate = (update: AcpUpdate) => {
-      if (update.sessionUpdate === "agent_message_chunk") {
-        const text = update.content?.text;
-        if (!text) return;
-
-        const messageId =
-          typeof update.messageId === "string"
-            ? update.messageId
-            : "default";
-        const id = `${attemptRef.current ?? "unknown"}:assistant:${messageId}`;
-
-        setMessages((current) => {
-          const index = current.findIndex((message) => message.id === id);
-          if (index === -1) {
-            return [...current, { id, role: "assistant", text }];
-          }
-
-          const next = [...current];
-          next[index] = {
-            ...next[index],
-            text: next[index].text + text,
-          };
-          return next;
-        });
-        return;
-      }
-
-      if (
-        update.sessionUpdate !== "tool_call" &&
-        update.sessionUpdate !== "tool_call_update"
-      ) {
-        return;
-      }
-
-      const toolCallId = update.toolCallId;
-      if (typeof toolCallId !== "string" || !toolCallId) return;
-
-      setTools((current) => {
-        const index = current.findIndex((tool) => tool.id === toolCallId);
-        const previous = index === -1 ? null : current[index];
-        const nextTool: ToolEntry = {
-          id: toolCallId,
-          title:
-            typeof update.title === "string"
-              ? update.title
-              : previous?.title ?? toolCallId,
-          status:
-            typeof update.status === "string"
-              ? update.status
-              : previous?.status ?? "pending",
-          kind:
-            typeof update.kind === "string"
-              ? update.kind
-              : previous?.kind,
-          name:
-            typeof update.name === "string"
-              ? update.name
-              : previous?.name,
-        };
-
-        if (index === -1) return [...current, nextTool];
-
-        const next = [...current];
-        next[index] = nextTool;
-        return next;
-      });
-    };
-
-    const applyEvent = (event: AgentStreamEvent) => {
-      if (event.attemptId) ensureAttempt(event.attemptId);
-
-      if (event.type === "prompt") {
-        setMessages((current) => [
-          ...current,
-          {
-            id: `user:${event.attemptId}:${event.seq}`,
-            role: "user",
-            text: event.text,
-          },
-        ]);
-        return;
-      }
-
-      if (event.type === "update") {
-        applyUpdate(event.update);
-        return;
-      }
-
-      if (event.type === "permission") {
-        setPermissions((current) => ({
-          ...current,
-          [event.permission.id]: event.permission,
-        }));
-        return;
-      }
-
-      if (event.type === "permission-mode") {
-        setAutoApprove(event.enabled);
-        return;
-      }
-
-      setSessionStatus(event.status);
-
-      if (event.error) {
-        setError(event.error);
-      }
-
-      if (event.status === "running") {
-        setConnection("open");
-      }
-    };
-
-    const handleEvent = (event: Event) => {
-      const messageEvent = event as MessageEvent<string>;
-      let data: AgentStreamEvent;
-
-      try {
-        data = JSON.parse(messageEvent.data) as AgentStreamEvent;
-      } catch {
-        return;
-      }
-
-      const eventId =
-        messageEvent.lastEventId || `${data.attemptId}:${data.seq}`;
-      const duplicate = seenRef.current.has(eventId);
-
-      if (!duplicate) {
-        seenRef.current.add(eventId);
-        applyEvent(data);
-      }
-
-      if (
-        data.type === "status" &&
-        (data.status === "completed" ||
-          data.status === "failed" ||
-          data.status === "idle")
-      ) {
-        terminalRef.current = true;
-        setConnection(data.status === "idle" ? "idle" : "done");
-        setAutoApprove(false);
-        source.close();
-
-        if (sourceRef.current === source) {
-          sourceRef.current = null;
-        }
-      }
-    };
-
-    source.addEventListener("prompt", handleEvent);
-    source.addEventListener("update", handleEvent);
-    source.addEventListener("status", handleEvent);
-    source.addEventListener("permission", handleEvent);
-    source.addEventListener("permission-mode", handleEvent);
-
-    source.onopen = () => {
-      if (!terminalRef.current) setConnection("open");
-    };
-
-    source.onerror = () => {
-      if (terminalRef.current) return;
-
-      if (source.readyState === EventSource.CLOSED) {
-        setConnection("error");
-      } else {
-        setConnection("reconnecting");
-      }
-    };
-
-    return () => {
-      terminalRef.current = true;
-      source.close();
-      if (sourceRef.current === source) {
-        sourceRef.current = null;
-      }
-    };
-  }, [episodeSlug, kind]);
-
-  async function decidePermission(
-    permissionId: string,
-    decision: "approve" | "reject",
-  ) {
-    setDeciding((current) => ({
-      ...current,
-      [permissionId]: true,
-    }));
-    setError(null);
-
-    try {
-      const security = await fetch("/api/security/session", {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-
-      if (!security.ok) {
-        throw new Error("Sesi keamanan belum siap. Muat ulang halaman.");
-      }
-
-      const response = await fetch(
-        `/api/permissions/${encodeURIComponent(permissionId)}`,
-        {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ decision }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | { permission?: PermissionRecord; error?: string }
-        | null;
-
-      if (!response.ok) {
-        setError(data?.error ?? "Gagal memproses keputusan izin.");
-        return;
-      }
-
-      if (data?.permission) {
-        setPermissions((current) => ({
-          ...current,
-          [permissionId]: data.permission as PermissionRecord,
-        }));
-      }
-    } catch (decisionError) {
-      setError(
-        decisionError instanceof Error
-          ? decisionError.message
-          : "Gagal memproses keputusan izin.",
-      );
-    } finally {
-      setDeciding((current) => {
-        const next = { ...current };
-        delete next[permissionId];
-        return next;
-      });
-    }
+    if (pinned.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight;
+  }, [entries]);
+  useEffect(() => {
+    if (!content.current) return;
+    const observer = new ResizeObserver(() => { if (pinned.current && viewport.current) viewport.current.scrollTop = viewport.current.scrollHeight; });
+    observer.observe(content.current);
+    return () => observer.disconnect();
+  }, []);
+  function jumpToLatest() {
+    pinned.current = true; setJump(false);
+    viewport.current?.scrollTo({ top: viewport.current.scrollHeight, behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
+  return <div className="agent-conversation-wrap"><div ref={viewport} className="agent-conversation" role="log" aria-label="Percakapan agen" aria-live="off" tabIndex={0} onScroll={event => { const element = event.currentTarget; pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < 72; setJump(!pinned.current); }}><div ref={content} className="agent-conversation-content">{entries.map((entry, index) => entry.type === "tool" ? <ToolActivity key={entry.id} tool={entry} /> : entry.type === "prompt" ? <details className="agent-instructions" key={entry.id}><summary><FileText size={14} /><span>Instruksi tahap</span><span className="agent-instructions-label">Dikirim aplikasi</span><ChevronDown size={13} className="agent-disclosure-arrow" /></summary><pre>{entry.text}</pre></details> : <AgentMessage key={entry.id} text={entry.text} streaming={running && index === entries.length - 1} />)}</div></div>{jump ? <Button className="agent-jump" variant="secondary" size="sm" onClick={jumpToLatest}><ArrowDown size={14} />Ke pesan terbaru</Button> : null}</div>;
+}
 
-  async function toggleAutoApprove() {
-    if (autoPending || sessionStatus !== "running") return;
-
-    setAutoPending(true);
-    setError(null);
-
-    try {
-      const security = await fetch("/api/security/session", {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-
-      if (!security.ok) {
-        throw new Error("Sesi keamanan belum siap. Muat ulang halaman.");
-      }
-
-      const response = await fetch(
-        `/api/episodes/${encodeURIComponent(episodeSlug)}/steps/${kind}/permissions/auto`,
-        {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ enabled: !autoApprove }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | { enabled?: boolean; error?: string }
-        | null;
-
-      if (!response.ok) {
-        setError(data?.error ?? "Gagal mengubah mode izin otomatis.");
-        return;
-      }
-
-      setAutoApprove(Boolean(data?.enabled));
-    } catch (toggleError) {
-      setError(
-        toggleError instanceof Error
-          ? toggleError.message
-          : "Gagal mengubah mode izin otomatis.",
-      );
-    } finally {
-      setAutoPending(false);
-    }
-  }
-
-  const permissionList = Object.values(permissions).sort(
-    (left, right) => {
-      const leftPending = left.status === "pending" ? 0 : 1;
-      const rightPending = right.status === "pending" ? 0 : 1;
-
-      return (
-        leftPending - rightPending ||
-        left.requestedAt.localeCompare(right.requestedAt)
-      );
-    },
-  );
-  const pendingPermissionCount = permissionList.filter(
-    (permission) => permission.status === "pending",
-  ).length;
-  const canToggleAuto =
-    sessionStatus === "running" && Boolean(attemptId);
-
-  const showEmptyState =
-    messages.length === 0 && tools.length === 0;
-
-  return (
-    <div className="grid min-w-0 gap-5">
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
-        <div className="flex flex-wrap items-center gap-2">
-          <StatusPill
-            tone={connectionTone(connection)}
-            pulse={connection === "open"}
-          >
-            {CONNECTION_LABELS[connection]}
-          </StatusPill>
-          <StatusPill
-            tone={sessionTone(sessionStatus)}
-            pulse={sessionStatus === "running"}
-          >
-            {SESSION_LABELS[sessionStatus]}
-          </StatusPill>
-        </div>
-        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
-          Live stream / SSE
-        </span>
-      </div>
-
-      <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.025] p-3.5 sm:p-4">
-        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <span
-              className={cn(
-                "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border",
-                autoApprove
-                  ? "border-primary/30 bg-primary/15 text-primary"
-                  : "border-white/10 bg-white/5 text-muted-foreground",
-              )}
-            >
-              <SparkIcon className="size-4" />
-            </span>
-            <div>
-              <p className="text-sm font-medium text-foreground">
-                Mode izin otomatis
-              </p>
-              <p className="mt-1 max-w-[58ch] text-xs leading-relaxed text-muted-foreground">
-                Berlaku hanya untuk langkah ini. Permintaan yang sudah
-                menunggu tetap membutuhkan keputusan manual.
-              </p>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
-            <div className="flex items-center gap-2">
-              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                {autoApprove ? "ON" : "OFF"}
-              </span>
-              <Switch
-                checked={autoApprove}
-                onCheckedChange={() => {
-                  void toggleAutoApprove();
-                }}
-                disabled={!canToggleAuto || autoPending}
-                aria-label="Mode izin otomatis"
-              />
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {autoApprove ? (
-                <StatusPill tone="accent">Auto-izin aktif</StatusPill>
-              ) : null}
-              {pendingPermissionCount > 0 ? (
-                <StatusPill tone="warning">
-                  {pendingPermissionCount} izin menunggu
-                </StatusPill>
-              ) : null}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {permissionList.length > 0 ? (
-        <div className="grid min-w-0 gap-2.5" aria-live="polite">
-          {permissionList.map((permission) => (
-            <Item
-              key={permission.id}
-              variant="outline"
-              size="sm"
-              className={cn(
-                "min-w-0 border-white/10 bg-white/[0.03] text-foreground",
-                permission.status === "pending" &&
-                  "border-primary/35 bg-primary/[0.055]",
-              )}
-            >
-              <ItemMedia variant="icon">
-                <span
-                  className={cn(
-                    "flex size-8 items-center justify-center rounded-full border",
-                    permission.status === "pending"
-                      ? "border-primary/30 bg-primary/10 text-primary"
-                      : "border-white/10 bg-white/5 text-muted-foreground",
-                  )}
-                >
-                  <ShieldIcon className="size-4" />
-                </span>
-              </ItemMedia>
-              <ItemContent className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2">
-                  <ItemTitle className="max-w-full break-words [overflow-wrap:anywhere] text-foreground">
-                    {permission.title}
-                  </ItemTitle>
-                  {permission.auto ? (
-                    <Badge
-                      variant="outline"
-                      className="border-primary/30 font-mono text-[10px] uppercase tracking-[0.08em] text-primary"
-                    >
-                      Auto
-                    </Badge>
-                  ) : null}
-                </div>
-                <ItemDescription className="line-clamp-none whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-muted-foreground">
-                  {permission.summary}
-                </ItemDescription>
-                {permission.error ? (
-                  <p className="break-words [overflow-wrap:anywhere] text-xs text-destructive">
-                    {permission.error}
-                  </p>
-                ) : null}
-              </ItemContent>
-              <ItemActions className="w-full justify-end sm:w-auto">
-                {permission.status === "pending" &&
-                sessionStatus === "running" ? (
-                  <>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="border-white/10 bg-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
-                      disabled={Boolean(deciding[permission.id])}
-                      onClick={() => {
-                        void decidePermission(
-                          permission.id,
-                          "reject",
-                        );
-                      }}
-                    >
-                      <XIcon className="size-3.5" />
-                      Tolak
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="bg-primary text-primary-foreground hover:brightness-105"
-                      disabled={Boolean(deciding[permission.id])}
-                      onClick={() => {
-                        void decidePermission(
-                          permission.id,
-                          "approve",
-                        );
-                      }}
-                    >
-                      <CheckIcon className="size-3.5" />
-                      Setujui
-                    </Button>
-                  </>
-                ) : (
-                  <StatusPill tone={permissionTone(permission)}>
-                    {permission.status === "pending"
-                      ? "Sesi tidak aktif"
-                      : permissionStatusLabel(permission)}
-                  </StatusPill>
-                )}
-              </ItemActions>
-            </Item>
-          ))}
-        </div>
-      ) : null}
-
-      {error ? <InlineError message={error} /> : null}
-
-      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20">
-        <div
-          aria-hidden="true"
-          className="bg-blueprint-dark pointer-events-none absolute inset-0 opacity-60"
-        />
-        <div className="relative h-[clamp(22rem,45vh,34rem)]">
-          <MessageScrollerProvider autoScroll>
-            <MessageScroller>
-              <MessageScrollerViewport>
-                <MessageScrollerContent className="gap-4 p-4 sm:p-5">
-                  {showEmptyState ? (
-                    <MessageScrollerItem
-                      messageId="empty-state"
-                      className="flex min-h-[18rem] items-center justify-center"
-                    >
-                      <ConsoleEmptyState connection={connection} />
-                    </MessageScrollerItem>
-                  ) : null}
-
-                  {messages.map((message) => (
-                    <MessageScrollerItem
-                      key={message.id}
-                      messageId={message.id}
-                      scrollAnchor={message.role === "user"}
-                      className="animate-rise"
-                    >
-                      <Message
-                        align={message.role === "user" ? "end" : "start"}
-                      >
-                        <MessageContent>
-                          <p
-                            className={cn(
-                              "mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground",
-                              message.role === "user" && "text-right",
-                            )}
-                          >
-                            {message.role === "user" ? "Anda" : "Agen"}
-                          </p>
-                          <Bubble
-                            align={
-                              message.role === "user" ? "end" : "start"
-                            }
-                            variant="ghost"
-                            className={cn(
-                              "max-w-[88%] rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed",
-                              message.role === "user"
-                                ? "border-primary/25 bg-primary text-primary-foreground"
-                                : "border-white/5 bg-white/[0.04] text-foreground",
-                            )}
-                          >
-                            <BubbleContent className="break-words whitespace-pre-wrap">
-                              {message.text}
-                            </BubbleContent>
-                          </Bubble>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  ))}
-
-                  {tools.length > 0 ? (
-                    <MessageScrollerItem
-                      messageId="tool-activity"
-                      className="animate-rise"
-                    >
-                      <Message>
-                        <MessageContent>
-                          <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3">
-                            <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
-                              <span>Tool activity</span>
-                              <span>{String(tools.length).padStart(2, "0")}</span>
-                            </div>
-                            <Trace>
-                              {tools.map((tool) => (
-                                <TraceLine
-                                  key={tool.id}
-                                  status={traceStatus(tool.status)}
-                                >
-                                  <TraceIcon>
-                                    <WrenchIcon />
-                                  </TraceIcon>
-                                  <TraceTitle>{tool.title}</TraceTitle>
-                                  <TraceDescription>
-                                    {toolStatusLabel(tool.status)}
-                                  </TraceDescription>
-                                </TraceLine>
-                              ))}
-                            </Trace>
-                          </div>
-                        </MessageContent>
-                      </Message>
-                    </MessageScrollerItem>
-                  ) : null}
-                </MessageScrollerContent>
-              </MessageScrollerViewport>
-              <MessageScrollerButton />
-            </MessageScroller>
-          </MessageScrollerProvider>
-        </div>
-      </div>
-
-      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-        <span>Langkah / {STEP_LABELS[kind]}</span>
-        {attemptId ? (
-          <span>Percobaan / {attemptId.slice(0, 8)}</span>
-        ) : (
-          <span>Menunggu sesi</span>
-        )}
-      </div>
-    </div>
-  );
+export function AgentStreamView({ episodeSlug, kind, pipelineStatus, phase, starting = false, agentName, modelId, effort, onCancel, cancelling = false }: {
+  episodeSlug: string; kind: StepKind; pipelineStatus?: StepStatus; phase?: string | null; starting?: boolean; agentName?: string | null; modelId?: string | null; effort?: string | null; onCancel?: () => void; cancelling?: boolean;
+}) {
+  const session = useAgentSession(episodeSlug, kind);
+  const { state, connection } = session;
+  const [now, setNow] = useState(() => Date.now());
+  const running = state.status === "running" || (state.status === "idle" && pipelineStatus === "running");
+  useEffect(() => {
+    if (!running) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [running]);
+  const presentation = sessionPresentation(state, connection, { pipelineStatus, starting, phase, now });
+  const pending = Object.values(state.permissions).filter(permission => permission.status === "pending" && running);
+  const resolved = Object.values(state.permissions).filter(permission => permission.status !== "pending");
+  const tools = state.entries.filter(entry => entry.type === "tool");
+  const elapsed = duration(state.startedAt, state.finishedAt, now);
+  const connected = connection === "open";
+  const StatusIcon = presentation.kind === "waiting" ? ShieldCheck : presentation.kind === "completed" ? CheckCircle2 : presentation.kind === "failed" ? AlertTriangle : presentation.kind === "stopped" ? Square : presentation.kind === "reconnecting" ? RefreshCw : Bot;
+  return <div className="agent-session" data-phase={presentation.kind}>
+    <header className="agent-session-header"><div className="agent-session-identity"><span className="agent-session-brand">{presentation.animate && state.entries.length > 0 ? <LogoIntro size={40} /> : <StatusIcon size={21} />}</span><div><h3>{agentName || "Agen produksi"}</h3><p>{[modelId, effort ? `Effort ${effort}` : null].filter(Boolean).join(" · ") || STEP_LABELS[kind]}</p></div></div><div className="agent-session-header-actions"><span className="agent-connection" data-connected={connected}><i />{connected ? "Terhubung" : connection === "done" ? "Riwayat tersimpan" : connection === "connecting" ? "Menghubungkan" : "Koneksi terputus"}</span>{running && onCancel ? <Button variant="outline" size="sm" onClick={onCancel} disabled={cancelling}><Square size={12} />{cancelling ? "Menghentikan…" : "Hentikan"}</Button> : null}</div></header>
+    <div className="agent-session-status"><span className="agent-status-symbol"><StatusIcon size={16} /></span><div role="status" aria-live="polite"><strong>{presentation.title}</strong><p>{presentation.description}</p></div>{elapsed ? <span className="agent-elapsed" aria-label={`Durasi sesi ${elapsed}`}><Clock3 size={12} />{elapsed}</span> : null}</div>
+    {pending.length ? <section className="agent-permission-queue" aria-label="Tindakan menunggu izin">{pending.length > 1 ? <p>{pending.length} tindakan memerlukan keputusan</p> : null}{pending.map(permission => <PermissionCard key={permission.id} permission={permission} deciding={Boolean(session.deciding[permission.id])} connected={connected} onDecide={(id, decision) => void session.decide(id, decision)} />)}</section> : null}
+    {session.actionError ? <SessionError message={session.actionError} /> : null}
+    {state.error && presentation.kind !== "stopped" ? <SessionError message={state.error} /> : null}
+    {state.entries.length ? <Conversation entries={state.entries} running={running && Boolean(state.lastTextAt) && now - Date.parse(state.lastTextAt!) < 6000} /> : <div className="agent-session-empty"><span className="agent-empty-mark">{presentation.animate ? <LogoIntro size={72} /> : <Bot size={30} />}</span><h4>{running || starting ? "Menyiapkan respons pertama" : presentation.kind === "loading" ? "Mengambil riwayat percakapan" : "Percakapan untuk tahap ini"}</h4><p>{running || starting ? "Agen dapat membaca instruksi dan menyiapkan pekerjaan sebelum mengirim teks." : "Pesan agen, aktivitas tool, dan hasil sesi akan tampil berurutan di sini."}</p></div>}
+    {(connection === "error" || connection === "reconnecting") ? <div className="agent-reconnect"><p>Menyambung ulang tidak akan menjalankan prompt lagi.</p><Button variant="outline" size="sm" onClick={session.reconnect}><RefreshCw size={13} />Sambungkan kembali</Button></div> : null}
+    <footer className="agent-session-footer"><div className="agent-auto-permission"><ShieldCheck size={15} /><label htmlFor={`agent-auto-${kind}`}>Izin otomatis</label><Switch id={`agent-auto-${kind}`} size="sm" checked={state.autoApprove} onCheckedChange={() => void session.toggleAutoApprove()} disabled={!running || !state.attemptId || !connected || session.autoPending} aria-label="Izin otomatis untuk sesi ini" /><span data-enabled={state.autoApprove}>{state.autoApprove ? "Aktif untuk sesi ini" : "Nonaktif"}</span></div><span className="agent-tool-count">{tools.length} aktivitas tool</span></footer>
+    {state.autoApprove ? <p className="agent-auto-note">Permintaan berikutnya akan disetujui otomatis. Izin yang sudah menunggu tetap memerlukan keputusan manual.</p> : null}
+    {resolved.length ? <details className="agent-permission-history"><summary><ShieldCheck size={13} /><span>Riwayat izin</span><span>{resolved.length} tindakan</span><ChevronDown size={13} className="agent-disclosure-arrow" /></summary><ul>{resolved.map(permission => <li key={permission.id}><span title={permission.title}>{compactToolTitle(permission.title)}</span><small data-status={permission.status}>{permissionStatus(permission)}</small></li>)}</ul></details> : null}
+    {state.attemptId ? <details className="agent-session-details"><summary>Detail sesi<ChevronDown size={12} className="agent-disclosure-arrow" /></summary><dl><div><dt>Tahap</dt><dd>{STEP_LABELS[kind]}</dd></div><div><dt>ID sesi</dt><dd>{state.attemptId}</dd></div><div><dt>Pembaruan terakhir</dt><dd>{state.lastActivityAt ? new Date(state.lastActivityAt).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit", second: "2-digit" }) : "Belum ada"}</dd></div></dl></details> : null}
+  </div>;
 }

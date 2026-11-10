@@ -3,9 +3,11 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { resolveWorkspaceDir } from '../workspace/init.ts';
 import { resolveWorkspacePath, type WorkspaceArea } from '../workspace/paths.ts';
+import { getRemotionProjectRoot } from '../remotion/project.ts';
 
 export function artifactPath(slug: string, fileName: string, area: WorkspaceArea = 'episode'): string {
-  const result = resolveWorkspacePath({ workspaceRoot: resolveWorkspaceDir(), episodeSlug: slug, area, fileName });
+  const projectArea = area === 'composition' || area === 'project-composition' ? 'project-composition' : area === 'composition-public' || area === 'project-public' ? 'project-public' : null;
+  const result = resolveWorkspacePath({ workspaceRoot: projectArea ? getRemotionProjectRoot() : resolveWorkspaceDir(), episodeSlug: slug, area: projectArea ?? area, fileName });
   if (!result.ok) throw new Error(`Lokasi file ditolak: ${fileName} (${result.reason}).`);
   return result.path;
 }

@@ -40,6 +40,7 @@ export type StartStepStreamOptions = {
   modelId?: string | null;
   effort?: string | null;
   workspaceRoot?: string;
+  workingDirectory?: 'episode' | 'remotion';
   stepId?: number | null;
   db?: Database.Database;
   onComplete?: () => Promise<void>;
@@ -279,6 +280,7 @@ function createPermissionRecord(
     summary,
     toolCallId: request.toolCall?.toolCallId,
     toolKind: request.toolCall?.kind,
+    ...(request.toolCall?.rawInput !== undefined ? { input: redactValue(request.toolCall.rawInput) } : {}),
     options: request.options,
     status: "pending",
     auto: state.autoApprovePermissions,
@@ -721,6 +723,7 @@ export async function startStepStream(
     episodeSlug: options.episodeSlug,
     workspaceRoot,
     onUpdate: (update) => emitUpdate(stream, update),
+    workingDirectory: options.workingDirectory,
     onPermissionRequest: (request) =>
       requestPermission(stream, request),
   });

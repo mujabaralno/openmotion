@@ -20,11 +20,13 @@ try {
     } finally { media.dispose(); }
   } else {
     const { bundle } = require('@remotion/bundler');
+    const relative = path.relative(path.join(remotionRoot, 'src', 'episodes'), path.resolve(input));
+    if (!relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) throw new Error('Komposisi harus berada di proyek utama remotion/src/episodes/<slug>.');
     const entryPoint = path.join(input, 'index.tsx');
     const modules = path.join(process.cwd(), 'remotion', 'node_modules');
     emit({ type: 'progress', progress: 0, phase: 'Menyiapkan komposisi' });
     const serveUrl = await bundle({
-      entryPoint, rootDir: remotionRoot, publicDir: path.join(input, 'public'),
+      entryPoint, rootDir: remotionRoot, publicDir: path.join(remotionRoot, 'public'),
       outDir: path.join(path.dirname(output), `.bundle-${path.basename(output)}`),
       onProgress: (progress) => emit({ type: 'progress', progress: progress / 100 * 0.1, phase: 'Menyiapkan komposisi' }),
       webpackOverride: (config) => ({ ...config, resolve: {

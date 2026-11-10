@@ -117,7 +117,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
   if (agentId) {
     task.phase = kind === 'script' ? 'Menyusun paket episode' : kind === 'tags' ? 'Menyiapkan tag emosi' : 'Merakit scene';
     try {
-      const attempt = await startStepStream({ episodeSlug: slug, kind, agentId, modelId, effort, prompt, stepId: step.id,
+      const attempt = await startStepStream({ episodeSlug: slug, kind, agentId, modelId, effort, workingDirectory: kind === 'scenes' ? 'remotion' : 'episode', prompt, stepId: step.id,
         onComplete: async () => {
           checkActive(slug, task);
           if (!fs.existsSync(output) || fs.statSync(output).mtimeMs === oldModified) throw new Error('Agen belum menulis atau memperbarui file keluaran yang diminta.');

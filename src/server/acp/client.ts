@@ -45,6 +45,7 @@ export type AcpSessionOptions = {
   agentId: string;
   episodeSlug: string;
   workspaceRoot?: string;
+  workingDirectory?: 'episode' | 'remotion';
   clientInfo?: {
     name: string;
     title?: string;
@@ -329,6 +330,7 @@ export class AcpSession {
         episodeSlug: this.options.episodeSlug,
         workspaceRoot: this.options.workspaceRoot,
         stdio: "pipe",
+        workingDirectory: this.options.workingDirectory,
       });
 
       this.appSessionId = registrySession.sessionId;

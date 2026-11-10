@@ -14,6 +14,6 @@ export async function POST(request: Request, context: { params: Promise<{ slug: 
     const body = await bodyObject(request);
     if (typeof body.agentId !== 'string' || !body.agentId || body.agentId.length > 64) throw new Error('Pilih agen terlebih dahulu.');
     if (body.modelId !== undefined && (typeof body.modelId !== 'string' || body.modelId.length > 500)) throw new Error('Model tidak valid.');
-    return json(await discoverAgentOptions({ agentId: body.agentId, episodeSlug: slug, modelId: body.modelId as string | undefined, signal: request.signal }));
+    return json(await discoverAgentOptions({ agentId: body.agentId, episodeSlug: slug, modelId: body.modelId as string | undefined, workingDirectory: kind === 'scenes' ? 'remotion' : 'episode', signal: request.signal }));
   } catch (error) { return apiError(error); }
 }

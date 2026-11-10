@@ -56,17 +56,32 @@ workspace/
     03-voiceover.timestamps.json
     03-audio.json                 # durasi audio terukur
     04-scenes.json                # manifest preview dan sidik input
-    remotion/
-      Episode.tsx                 # visual yang dibuat agen
-      index.tsx                   # wrapper milik aplikasi
-      props.json
-      public/audio.mp3
     logs/<kind>.jsonl
     out/preview.mp4
     out/<slug>.mp4
 ```
 
 Status dan metadata ada di `data/app.db`; pilihan studio ada di `data/settings.json`. Skill dan template bawaan di repo `agents/` disalin ke workspace jika belum ada. Penyesuaian pengguna dipertahankan.
+
+Proyek Remotion berada di **`openmotion/remotion`**, dengan satu instalasi dependensi untuk semua episode:
+
+```text
+remotion/
+  package.json
+  node_modules/
+  tsconfig.json
+  src/episodes/<slug>/
+    Episode.tsx                    # visual yang dibuat agen
+    index.tsx                      # wrapper milik aplikasi
+    props.json
+  public/episodes/<slug>/
+    audio.mp3                      # salinan kerja audio episode
+    timestamps.json
+```
+
+Pada tahap Rakit scene, folder kerja agen adalah proyek `remotion/`. Hasil MP4 tetap disimpan di `workspace/episodes/<slug>/out/`. Tidak perlu instalasi `node_modules` per episode. Folder `workspace/episodes/<slug>/remotion` dari versi lama dipertahankan; source lamanya disalin jika source di proyek utama belum ada, saat tahap scene disiapkan kembali.
+
+Untuk membuka komposisi episode yang sudah dibuat di Studio dari direktori `remotion/`, gunakan `npx remotion studio src/episodes/<slug>/index.tsx`. Entry `src/index.ts` bawaan tetap berisi contoh awal proyek.
 
 ## Batas dan keamanan
 

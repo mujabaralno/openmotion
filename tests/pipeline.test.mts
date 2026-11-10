@@ -8,14 +8,17 @@ import test, { after } from 'node:test';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
 const originalCwd = process.cwd();
-const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'openmotion-pipeline-test-'));
+const temporary = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'openmotion-pipeline-test-')));
 process.chdir(temporary);
 process.env.WORKSPACE_DIR = path.join(temporary, 'workspace');
 process.env.WORKFLOW_TOKEN_PATH = path.join(temporary, 'token');
 process.env.ELEVENLABS_API_KEY = 'local-test-key-never-sent';
 fs.cpSync(path.join(root, 'agents'), path.join(temporary, 'agents'), { recursive: true });
 fs.cpSync(path.join(root, 'scripts'), path.join(temporary, 'scripts'), { recursive: true });
-fs.symlinkSync(path.join(root, 'remotion'), path.join(temporary, 'remotion'), 'dir');
+fs.mkdirSync(path.join(temporary, 'remotion'), { recursive: true });
+for (const name of ['package.json', 'tsconfig.json', 'AGENTS.md']) fs.copyFileSync(path.join(root, 'remotion', name), path.join(temporary, 'remotion', name));
+fs.cpSync(path.join(root, 'remotion', 'src'), path.join(temporary, 'remotion', 'src'), { recursive: true, filter: source => !source.startsWith(path.join(root, 'remotion', 'src', 'episodes')) });
+fs.symlinkSync(path.join(root, 'remotion', 'node_modules'), path.join(temporary, 'remotion', 'node_modules'), 'dir');
 
 // Import after chdir: the database must never touch the user's data/app.db.
 const { getDb } = await import('../src/server/db/index.ts');
@@ -23,7 +26,8 @@ const { createEpisode } = await import('../src/server/episodes/service.ts');
 const { initializeWorkspace } = await import('../src/server/workspace/init.ts');
 const { runPipelineStep, pipelineView, approveStep, reviseStep, saveTextArtifact, cancelPipelineStep } = await import('../src/server/pipeline/service.ts');
 const { getSteps, recoverInterruptedSteps } = await import('../src/server/pipeline/state.ts');
-const { artifactPath, readArtifact } = await import('../src/server/pipeline/files.ts');
+const { artifactPath, readArtifact, writeArtifact } = await import('../src/server/pipeline/files.ts');
+const { prepareComposition } = await import('../src/server/pipeline/composition.ts');
 const { saveSettings } = await import('../src/server/pipeline/settings.ts');
 const { subscribeStepStream, decidePermission, resetAgentStreamsForTests } = await import('../src/server/agent-streams/manager.ts');
 const { generateVoiceover } = await import('../src/server/elevenlabs/client.ts');
@@ -130,6 +134,9 @@ test('complete production pipeline: stubbed ElevenLabs, actual MP3 probe, previe
     assert.ok(pipelineView(episode.slug).audio!.duration! > 0);
     approveStep(episode.slug, 'voiceover');
     await agentStep(episode.slug, 'scenes');
+    assert.equal(path.dirname(artifactPath(episode.slug, 'Episode.tsx', 'composition')), path.join(temporary, 'remotion', 'src', 'episodes', episode.slug));
+    assert.equal(fs.existsSync(path.join(temporary, 'remotion', 'test-execution.json')), true);
+    assert.equal(fs.existsSync(path.join(process.env.WORKSPACE_DIR!, 'episodes', episode.slug, 'remotion')), false);
     assert.equal(pipelineView(episode.slug).previewAvailable, true);
     assert.equal(pipelineView(episode.slug).scenes!.captionsEstimated, true);
     approveStep(episode.slug, 'scenes');
@@ -197,4 +204,45 @@ test('pipeline sends and persists the selected agent, model and effort; invalid 
   await assert.rejects(runPipelineStep(episode.slug, 'script', { agentId: 'configured', modelId: 'not-a-model', effort: 'low' }), /tidak tersedia/);
   assert.equal(getSteps(episode.slug)[0].status, 'failed');
   assert.equal(fs.statSync(executionFile).mtimeMs, modified);
+});
+
+test('composition uses the shared project and preserves legacy source and original audio', () => {
+  const episode = createEpisode({ title: 'Shared project', topic: 'Shared Remotion project' });
+  writeArtifact(episode.slug, '01-naskah.md', 'A local narration.');
+  writeArtifact(episode.slug, '03-audio.json', JSON.stringify({ duration: 1 }));
+  writeArtifact(episode.slug, '03-voiceover.timestamps.json', JSON.stringify({ alignment: null }));
+  writeArtifact(episode.slug, '03-voiceover.mp3', Buffer.from('path-staging-fixture'));
+  const legacyDirectory = path.join(process.env.WORKSPACE_DIR!, 'episodes', episode.slug, 'remotion');
+  fs.mkdirSync(legacyDirectory, { recursive: true });
+  const legacySource = path.join(legacyDirectory, 'Episode.tsx');
+  fs.writeFileSync(legacySource, 'export default function Episode(){return null;}');
+  prepareComposition(episode.slug);
+  const source = artifactPath(episode.slug, 'Episode.tsx', 'composition');
+  assert.equal(source, path.join(temporary, 'remotion', 'src', 'episodes', episode.slug, 'Episode.tsx'));
+  assert.equal(fs.readFileSync(source, 'utf8'), fs.readFileSync(legacySource, 'utf8'));
+  assert.deepEqual(fs.readFileSync(artifactPath(episode.slug, 'audio.mp3', 'composition-public')), fs.readFileSync(artifactPath(episode.slug, '03-voiceover.mp3')));
+  assert.match(fs.readFileSync(artifactPath(episode.slug, 'index.tsx', 'composition'), 'utf8'), new RegExp(`episodes/${episode.slug}/audio.mp3`));
+  fs.appendFileSync(source, '\n// newer shared-project source');
+  prepareComposition(episode.slug);
+  assert.match(fs.readFileSync(source, 'utf8'), /newer shared-project source/);
+  assert.doesNotMatch(fs.readFileSync(legacySource, 'utf8'), /newer shared-project source/);
+  const prompt = buildStepPrompt(episode.slug, 'scenes', '');
+  assert.ok(prompt.includes(`SCENE_OUTPUT_FILE: ${source}`));
+  assert.ok(prompt.includes(`This is your working directory.`));
+  const typecheck = spawnSync(process.execPath, [path.join(root, 'remotion', 'node_modules', 'typescript', 'bin', 'tsc'), '--project', path.join(temporary, 'remotion', 'tsconfig.json'), '--noEmit']);
+  assert.equal(typecheck.status, 0, String(typecheck.stdout) + String(typecheck.stderr));
+});
+
+test('preparing a new scene does not create an entry importing a missing visual source', () => {
+  const episode = createEpisode({ title: 'Pending visual', topic: 'Pending visual source' });
+  writeArtifact(episode.slug, '01-naskah.md', 'A local narration.');
+  writeArtifact(episode.slug, '03-audio.json', JSON.stringify({ duration: 1 }));
+  writeArtifact(episode.slug, '03-voiceover.timestamps.json', JSON.stringify({ alignment: null }));
+  writeArtifact(episode.slug, '03-voiceover.mp3', Buffer.from('path-staging-fixture'));
+  prepareComposition(episode.slug);
+  assert.equal(fs.existsSync(artifactPath(episode.slug, 'props.json', 'composition')), true);
+  assert.equal(fs.existsSync(artifactPath(episode.slug, 'index.tsx', 'composition')), false);
+  writeArtifact(episode.slug, 'Episode.tsx', 'export default function Episode(){return null;}', 'composition');
+  prepareComposition(episode.slug);
+  assert.equal(fs.existsSync(artifactPath(episode.slug, 'index.tsx', 'composition')), true);
 });
