@@ -59,6 +59,18 @@ Skema lengkap, aturan migrasi, dan cara menambah migrasi berikutnya ada di [`doc
 
 Inisialisasi tidak menimpa file atau episode yang sudah ada. Jika konfigurasi kosong atau lokasi tidak bisa dipakai, log menampilkan penyebab dan cara memperbaikinya. Detail, contoh `agents.json`, dan daftar kesalahan ada di [`docs/workspace.md`](docs/workspace.md).
 
+## Episode
+
+Buka <http://127.0.0.1:3000> untuk masuk ke halaman episode. Pengguna dapat membuat episode dari judul dan topik, lalu membuka daftar dan detailnya.
+
+Pembuatan episode menghasilkan baris database, folder `episodes/<slug>/`, `episode.json`, dan lima langkah produksi berstatus `idle`. Slug dibuat otomatis dan tetap unik meskipun judulnya sama. Status langkah dibaca dari SQLite.
+
+API tersedia di `GET/POST /api/episodes` dan `GET /api/episodes/<slug>`. Detail alur, aturan slug, format data, dan batasan ada di [`docs/episodes.md`](docs/episodes.md).
+
+## Styling
+
+Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` hanya mengimpor Tailwind; seluruh tampilan UI memakai utility class Tailwind. Nanti bisa dilengkapi komponen shadcn/ui.
+
 ## Remotion
 
 Contoh komposisi ada di folder `remotion/` dengan paket terpisah.
@@ -75,10 +87,13 @@ npm run render     # render contoh ke out/example.mp4
 ```
 src/app/              halaman Next.js (App Router)
 src/app/api/          route handler API
+src/app/episodes/     halaman daftar dan detail episode
 src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi, skema, dan migrasi SQLite
+src/server/episodes/  slug, repository, dan service episode
 src/server/security/  aturan Host/Origin dan token
 src/server/workspace/ penjaga path, whitelist, dan inisialisasi workspace
+src/components/       form dan komponen status episode
 tests/                tes unit
 docs/                 catatan arsitektur dan keamanan
 remotion/             proyek Remotion contoh

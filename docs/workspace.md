@@ -29,7 +29,7 @@ Setelah mengubah `.env.local`, restart `npm run dev`.
 
 | Item | Kegunaan |
 |------|----------|
-| `episodes/` | Folder episode; dibuat pada M0-6. |
+| `episodes/` | Folder episode; episode dibuat lewat UI (lihat [`episodes.md`](episodes.md)). |
 | `prompts/` | Template prompt; diisi pada M2-1. |
 | `guide/` | Panduan gaya; diisi pada M2-1. |
 | `agents.json` | Contoh konfigurasi agen. |
