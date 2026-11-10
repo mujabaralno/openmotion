@@ -3,7 +3,11 @@ import type { ChildProcess } from "node:child_process";
 type PendingRequest = {
   resolve: (value: unknown) => void;
   reject: (error: Error) => void;
-  timer: NodeJS.Timeout;
+  timer: NodeJS.Timeout | null;
+  method: string;
+  remaining: number;
+  deadline: number;
+  timeoutMs: number;
 };
 
 type RequestHandler = (params: unknown) => Promise<unknown> | unknown;
@@ -158,7 +162,7 @@ export class AcpJsonRpcConnection {
     if (!pending) return;
 
     this.pending.delete(message.id);
-    clearTimeout(pending.timer);
+    if (pending.timer) clearTimeout(pending.timer);
 
     if (message.error) {
       pending.reject(
@@ -213,7 +217,7 @@ export class AcpJsonRpcConnection {
     this.closed = true;
 
     for (const pending of this.pending.values()) {
-      clearTimeout(pending.timer);
+      if (pending.timer) clearTimeout(pending.timer);
       pending.reject(error);
     }
     this.pending.clear();
@@ -249,11 +253,31 @@ export class AcpJsonRpcConnection {
       this.pending.set(id, {
         resolve: (value) => resolve(value as T),
         reject,
-        timer,
+        timer, method, remaining: timeoutMs, deadline: Date.now() + timeoutMs, timeoutMs,
       });
 
       this.write({ jsonrpc: "2.0", id, method, params });
     });
+  }
+
+  pauseTimeout(method: string): void {
+    for (const pending of this.pending.values()) {
+      if (pending.method !== method || !pending.timer) continue;
+      clearTimeout(pending.timer);
+      pending.timer = null;
+      pending.remaining = Math.max(1, pending.deadline - Date.now());
+    }
+  }
+
+  resumeTimeout(method: string): void {
+    for (const [id, pending] of this.pending) {
+      if (pending.method !== method || pending.timer) continue;
+      pending.deadline = Date.now() + pending.remaining;
+      pending.timer = setTimeout(() => {
+        this.pending.delete(id);
+        pending.reject(new AcpRequestTimeoutError(method, pending.timeoutMs));
+      }, pending.remaining);
+    }
   }
 
   notify(method: string, params: unknown) {

@@ -1,0 +1,10 @@
+Assemble this approved episode in Remotion from {{package}}, the tagged narration {{tagged}}, the real audio metadata {{audioMetadata}}, and the staged audio public/audio.mp3.
+Read {{skill}}, its style-bible.md and remotion-parallax-recipe.md. Follow all scene prompts, layer map, palette, camera plan, visual exclusions, verified facts, and continuity in the package. Adapt scene boundaries to the measured audio duration, not the provisional written duration.
+Write the complete working React/TypeScript visual composition at {{composition}}. Export the component as DEFAULT. The application owns index.tsx, props.json, audio and synchronized caption overlay; do not edit them. Your component receives props: {durationInFrames:number, fps:number, audioDuration:number, title:string, words:Array<{text:string,start:number,end:number}>}. It may use useCurrentFrame(), useVideoConfig(), interpolate(), spring(), Sequence, AbsoluteFill and SVG from React/Remotion. Everything must be deterministic by frame. Draw the actual story-specific vector characters and scenery with code. No generated photos, remote assets, unsupported packages, CSS animation timers, network calls, filesystem code or useEffect-based animation. Use only react and remotion imports. No audio element: the app plays the single complete narration track. Leave room for the app's captions at the lower mobile-safe area. Build a silent end card for the final three seconds.
+Never substitute a generic slideshow or a text-only template for the scene prompts. Implement the complete episode, with at most about eight depth layers and three blurred layers at a time. Do not render or install packages; the app handles preview/render.
+{{notes}}
+Edit only Episode.tsx for this episode. Finish by naming the output file.
+
+Also read the creator's shared visual guide at {{guide}} and follow its series constants.
+
+The approved master narration and actual audio take precedence if older scene narration lines differ. Update visual timing and on-screen wording to remain consistent with the approved narration.

@@ -1,10 +1,12 @@
+> Pembaruan integrasi: endpoint `/run` kini menjalankan pipeline dari template server, memeriksa persetujuan langkah, dan menyimpan status di SQLite. Kontrol prompt bebas “Sesi uji” tidak menjadi UI produksi. Lihat `production-pipeline.md` untuk kontrak saat ini. Detail format SSE dan replay di bawah tetap menjadi acuan transport.
+
 # Streaming Chat
 
 Streaming menampilkan keluaran agen secara bertahap lewat SSE. Riwayat minimum disimpan sebagai JSONL agar refresh dan reconnect tidak memulai ulang agen.
 
 ## Alur
 
-1. Klien memulai sesi langkah (kontrol uji sementara) lewat `POST /api/episodes/:slug/steps/:kind/run`.
+1. Klien menjalankan tahap produksi lewat `POST /api/episodes/:slug/steps/:kind/run`; server membangun prompt dari template dan memeriksa persetujuan tahap sebelumnya.
 2. Server menjalankan `AcpSession` dan mencatat setiap event ke `logs/<kind>.jsonl` di folder episode.
 3. Event disiarkan ke semua subscriber SSE dan disimpan di session manager.
 4. Browser membuka `GET /api/episodes/:slug/steps/:kind/stream`.
@@ -18,14 +20,14 @@ Membuka stream, refresh, atau reconnect **tidak** memulai proses agen dan tidak 
 | Metode | Rute | Fungsi |
 |--------|------|--------|
 | `GET` | `/api/agents` | Daftar `id`/`name` agen dari `agents.json` |
-| `POST` | `/api/episodes/:slug/steps/:kind/run` | Kontrol uji: mulai sesi agen untuk langkah |
+| `POST` | `/api/episodes/:slug/steps/:kind/run` | Jalankan tahap pipeline |
 | `GET` | `/api/episodes/:slug/steps/:kind/stream` | SSE riwayat + update live |
 | `POST` | `/api/permissions/:id` | Keputusan izin manual |
 | `POST` | `/api/episodes/:slug/steps/:kind/permissions/auto` | Toggle auto-izin untuk sesi aktif |
 
 Semua rute `/api/*` melewati guard keamanan. `POST` membutuhkan Origin dan token. SSE adalah `GET`; browser EventSource mengirim cookie yang diperlukan secara same-origin.
 
-`run` sengaja minimal: tidak mengubah status langkah di SQLite dan tidak menambahkan aturan pipeline. Kontrol ini dipakai untuk menguji streaming sampai UI/pipeline langkah berikutnya tersedia.
+`run` memulai pekerjaan pipeline sesuai template dan data episode yang tersimpan. Riwayat transport tetap disimpan terpisah dari status langkah di SQLite.
 
 ## Format SSE
 
@@ -47,7 +49,7 @@ data: {"seq":7,"attemptId":"...","type":"status","status":"completed","agentId":
 
 Event:
 
-- `prompt` — prompt pengguna.
+- `prompt` — prompt produksi yang dibangun server.
 - `update` — `session/update` ACP (teks, tool call, update tool).
 - `status` — `idle`, `running`, `completed`, atau `failed`.
 - `permission` — permintaan izin dan perubahan statusnya.
@@ -101,7 +103,7 @@ Perilaku:
 - Panel ditutup saat pindah halaman/komponen unmount; agen tidak dihentikan.
 - Kartu izin menampilkan tindakan dan tombol Setujui/Tolak; setelah sesi berakhir kartu menjadi tidak aktif.
 - Switch auto-izin hanya berlaku untuk sesi/langkah yang sedang aktif.
-- Kontrol “Sesi uji” memilih agen dan mengirim prompt untuk menguji alur; ini bukan aturan pipeline.
+- Agen dipilih pada panel produksi; tombol Jalankan agen memakai prompt dari template server.
 
 Detail izin dan auto-izin ada di [`permissions.md`](permissions.md).
 
@@ -125,26 +127,29 @@ npm run test:security
 
 `npm run test:stream` menjalankan server Next sungguhan dan memeriksa:
 
-- Pembuatan episode dan panel chat tampil di halaman detail.
-- SSE prompt/update/status.
-- Urutan dan attempt konsisten.
-- Refresh memutar riwayat tanpa menambah log/sesi.
-- Reconnect memulihkan event yang terlewat tanpa duplikasi.
-- Kind/langkah atau episode tidak valid ditolak.
-- Origin asing ditolak guard.
+- Build produksi, pembuatan episode, dan halaman daftar/detail/pengaturan.
+- SSE prompt/update/status serta kartu izin sebelum penulisan artefak.
+- Riwayat diputar ulang ketika tersambung kembali dan setelah server restart.
+- Editor mengubah paket dan membatalkan persetujuan tahap setelahnya.
+- Prasyarat tahap, file, dan episode tidak valid ditolak.
+- Metadata media, byte range, dan range tidak valid.
+
+Urutan event, deduplikasi, isolasi attempt, dan mode izin otomatis diuji oleh suite manager di `npm test`. Guard Origin/Host dan pergantian token diuji oleh `test:security`.
 
 ## Uji manual
 
 1. Isi `WORKSPACE_DIR` dan `agents.json` dengan agen (mock atau agen asli).
 2. Jalankan `npm run dev`, buka detail episode, pilih langkah.
-3. Pada “Sesi uji”, pilih agen dan kirim prompt.
+3. Pilih agen pada panel produksi, lalu tekan Jalankan agen.
 4. Amati teks/tool/status bertahap.
 5. Refresh halaman: riwayat tetap ada dan agen tidak dijalankan ulang.
 6. Putuskan jaringan sementara atau matikan koneksi browser: koneksi menunjukkan “Menyambung ulang”, lalu riwayat yang terlewat dipulihkan saat tersambung.
 
 ## Batasan
 
-- Tombol pembatalan dan penghentian sesi menyeluruh mengikuti M1-6.
-- Redaksi rahasia dan transkrip lengkap mengikuti M1-7.
-- Status `steps` di SQLite belum diubah oleh kontrol streaming; pipeline/approval mengikuti issue berikutnya.
+- Pembatalan terhubung melalui dashboard dan endpoint cancel pipeline.
+- Redaksi rahasia dilakukan sebelum streaming dan penyimpanan transkrip.
+- Status langkah SQLite dikelola layanan pipeline; status transport SSE tetap menunjukkan siklus sesi agen.
 - Riwayat menampilkan attempt terbaru; attempt lama tetap tersimpan di JSONL tetapi belum memiliki pemilih attempt di UI.
+
+Skrip smoke sekarang menggunakan kontrak pipeline produksi. Hasil verifikasi ada di `testing.md`.

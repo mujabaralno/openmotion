@@ -1,157 +1,95 @@
-# Workflow Studio
+# OpenMotion
 
-Aplikasi web lokal untuk mengelola produksi video: naskah, voice-over, scene, dan render. Aplikasi hanya berjalan di komputer sendiri (`127.0.0.1`) dan tidak untuk di-deploy ke internet.
+Dashboard produksi Shorts lokal: topik → paket episode parallax → narasi bertag → voice-over ElevenLabs → rakit scene → render dan review. Setiap hasil ditinjau dan disetujui pengguna sebelum tahap berikutnya dibuka.
 
-## Prasyarat
+## Menjalankan
 
-- Node.js 22 atau lebih baru
-- npm
-
-## Menjalankan dari nol
+Prasyarat: Node.js 22+, npm, dan satu coding agent dengan ACP yang sudah terpasang serta login. CommandCode adalah acuan integrasi pertama dari `docs/agents.md`.
 
 ```bash
-git clone <url-repo> workflow-studio
-cd workflow-studio
 npm install
-cp .env.local.example .env.local   # isi WORKSPACE_DIR dengan path absolut
+npm install --prefix remotion
+cp .env.local.example .env.local
 npm run dev
 ```
 
-Buka <http://127.0.0.1:3000>. Aplikasi sengaja terikat ke `127.0.0.1`, jadi tidak bisa dibuka dari perangkat lain di jaringan yang sama.
+Isi `WORKSPACE_DIR` dengan path absolut dan `ELEVENLABS_API_KEY` di `.env.local`, lalu restart server. Buka http://127.0.0.1:3000. Aplikasi hanya untuk komputer sendiri. `APP_PORT` harus sesuai port Next.js jika menggunakan port selain 3000.
 
-## Perintah
+Di **Pengaturan**:
 
-| Perintah | Fungsi |
-|----------|--------|
-| `npm run dev` | Menjalankan server pengembangan di `127.0.0.1:3000` |
-| `npm run build` | Membuat build produksi |
-| `npm run start` | Menjalankan hasil build di `127.0.0.1:3000` |
-| `npm run lint` | Menjalankan ESLint |
-| `npm run typecheck` | Memeriksa tipe TypeScript |
-| `npm test` | Menjalankan seluruh tes unit |
-| `npm run test:security` | Menjalankan tes integrasi keamanan API |
-| `npm run test:stream` | Menjalankan tes integrasi streaming SSE |
+- Periksa lokasi workspace; lokasinya diatur lewat environment.
+- Pada tab Agen, tambahkan Claude Code, Codex, OpenCode, atau Command Code dan pilih agen utama. Konfigurasi `agents.json` tetap tersedia pada bagian lanjutan.
+- Isi Voice ID dan model ElevenLabs yang mendukung audio tags. Default model adalah `eleven_v3`; model bisa diganti sesuai akses akun.
+- Timestamp aktif secara default. Jika model tidak mendukung endpoint tersebut, nonaktifkan; caption pengganti menggunakan timing perkiraan berdasarkan audio.
+- Sesuaikan nama seri, bahasa, template, dan panduan visual bila diperlukan.
 
-## Database
+## Produksi episode
 
-Database SQLite dibuat otomatis saat server pertama kali berjalan, di `data/app.db`. Folder `data/` tidak di-commit. Tabel: `episodes`, `steps`, `permission_log`, dan `render_jobs`; perubahan skema dicatat di `schema_migrations`.
+1. **Buat episode:** cukup isi topik; judul boleh dikosongkan untuk mengikuti topik.
+2. **Paket episode:** pilih agen, model, dan effort pada panel Agen produksi, lalu jalankan. Tanggapi kartu izin, baca dokumen lengkap dan master narasi. Edit bila perlu, lalu setujui.
+3. **Tag emosi:** agen menyiapkan narasi bertag tanpa mengganti kata. Tinjau dan setujui.
+4. **Voice-over:** aplikasi mengirim narasi bertag ke ElevenLabs. Penggunaan karakter ditampilkan sebagai perkiraan, bukan nilai kredit pasti. Dengarkan audio lalu setujui. Generate ulang perlu konfirmasi penimpaan.
+5. **Rakit scene:** agen menggambar visual Remotion berdasarkan paket episode dan audio sebenarnya. Aplikasi menghasilkan preview video 540×960 untuk review. Setujui atau beri catatan revisi.
+6. **Render:** hasil final 1080×1920, 30 FPS, H.264. Progres tersimpan. Putar, unduh, dan setujui video atau minta revisi yang membuka kembali tahap scene.
 
-Nilai `steps.kind` dan `steps.status` dibatasi oleh trigger sesuai dokumen. Status aplikasi tersimpan permanen, sedangkan transkrip agen tetap berupa file `logs/<kind>.jsonl` di folder episode.
+Setiap tahap dapat dibatalkan. Refresh browser menyambung ulang ke pekerjaan yang masih berjalan. Server restart menandai pekerjaan yang terputus sebagai gagal; prompt dan panggilan berbayar tidak diulang otomatis. Isi file tahap berikutnya dibaca dari workspace, bukan disalin kembali dari chat.
 
-Untuk memastikan database, migrasi, dan hubungan antartabel bekerja:
+Daftar model/effort dibaca dari agen lewat ACP tanpa mengirim prompt. Effort mengikuti model: tidak semua model menyediakan low/medium/high. Pilihan diterapkan sebelum prompt dan disimpan per tahap saat dijalankan. Mengganti model memuat ulang pilihan effort. Pilihan yang tidak didukung ditolak, sehingga tidak diam-diam kembali ke default. Tahap Tag emosi dan Rakit scene juga memiliki pilihan tersendiri; pilihan ini terpisah dari model ElevenLabs.
 
-```bash
-npm test
-```
-
-Skema lengkap, aturan migrasi, dan cara menambah migrasi berikutnya ada di [`docs/database.md`](docs/database.md).
+Preview menggunakan renderer lokal yang sama dengan hasil final. Render pertama dapat membutuhkan unduhan browser headless Remotion. Pastikan komputer mempunyai akses unduhan dan ruang penyimpanan. Preview membutuhkan waktu render, bukan Player interaktif.
 
 ## Workspace
 
-`WORKSPACE_DIR` menunjuk folder data produksi, terpisah dari kode aplikasi. Saat server start, aplikasi membuat struktur awal bila belum ada:
-
 ```text
-<WORKSPACE_DIR>/
-├── episodes/
-├── prompts/
-├── guide/
-└── agents.json
+workspace/
+  agents/shorts-episode-parallax/   # skill dan referensi
+  agents.json                     # perintah ACP
+  prompts/                        # script.md, tags.md, scenes.md
+  guide/style-parallax.md
+  episodes/<slug>/
+    episode.json
+    AGENTS.md
+    01-episode.md                 # paket produksi lengkap
+    01-naskah.md                  # master narasi bersih
+    02-naskah-tagged.md
+    03-voiceover.mp3
+    03-voiceover.timestamps.json
+    03-audio.json                 # durasi audio terukur
+    04-scenes.json                # manifest preview dan sidik input
+    remotion/
+      Episode.tsx                 # visual yang dibuat agen
+      index.tsx                   # wrapper milik aplikasi
+      props.json
+      public/audio.mp3
+    logs/<kind>.jsonl
+    out/preview.mp4
+    out/<slug>.mp4
 ```
 
-Inisialisasi tidak menimpa file atau episode yang sudah ada. Jika konfigurasi kosong atau lokasi tidak bisa dipakai, log menampilkan penyebab dan cara memperbaikinya. Detail, contoh `agents.json`, dan daftar kesalahan ada di [`docs/workspace.md`](docs/workspace.md).
+Status dan metadata ada di `data/app.db`; pilihan studio ada di `data/settings.json`. Skill dan template bawaan di repo `agents/` disalin ke workspace jika belum ada. Penyesuaian pengguna dipertahankan.
 
-## Episode
+## Batas dan keamanan
 
-Buka <http://127.0.0.1:3000> untuk masuk ke halaman episode. Pengguna dapat membuat episode dari judul dan topik, lalu membuka daftar dan detailnya.
+- Seluruh API memakai guard Host/Origin. Tindakan membutuhkan token per-start.
+- Izin awal manual. Auto-izin harus dinyalakan pengguna untuk pelaksanaan langkah aktif, dan setiap keputusan dicatat. Pilihan persetujuan dibatasi `allow_once`.
+- Penjaga path membatasi file API. Coding agent tetap merupakan alat developer yang dapat menjalankan perintah sesuai izin dan pengaturan agen; instruksi folder kerja bukan sandbox sistem operasi.
+- Key API tidak dikirim ke UI atau proses renderer. Nilai rahasia yang dikenal disaring sebelum pencatatan dan streaming.
+- Pengubahan paket/narasi membatalkan persetujuan tahap turunannya. Artefak tahap berikutnya harus dibuat serta ditinjau ulang. Dokumen dan source visual merupakan working file selama revisi; audio/video lama baru diganti setelah hasil baru berhasil dibuat.
+- Riset fakta, kualitas visual, dan hasil narasi tetap perlu review manusia. Tidak ada upload YouTube atau publikasi otomatis.
 
-Pembuatan episode menghasilkan baris database, folder `episodes/<slug>/`, `episode.json`, dan lima langkah produksi berstatus `idle`. Slug dibuat otomatis dan tetap unik meskipun judulnya sama. Status langkah dibaca dari SQLite.
-
-API tersedia di `GET/POST /api/episodes` dan `GET /api/episodes/<slug>`. Detail alur, aturan slug, format data, dan batasan ada di [`docs/episodes.md`](docs/episodes.md).
-
-## Agent registry
-
-`agents.json` dibaca dari workspace dan divalidasi sebelum agen dijalankan. Registry menjalankan paling banyak satu proses per sesi pada folder episode yang sudah diverifikasi, menyimpan status di `globalThis`, dan membersihkan proses beserta turunannya saat server menerima `SIGINT`/`SIGTERM`.
-
-Format konfigurasi, API registry, status proses, dan cara verifikasi cleanup ada di [`docs/agents-registry.md`](docs/agents-registry.md). Protokol ACP, chat, dan izin menyusul di issue berikutnya.
-
-## ACP client
-
-Klien ACP menghubungkan registry ke proses agen lewat stdio: `initialize`, `session/new` pada folder episode, `session/prompt`, update bertahap, dan permintaan izin. Secara default izin tidak disetujui otomatis; handler izin disiapkan untuk M1-5.
-
-Detail API, timeout, penanganan error, dan hasil uji manual dengan CommandCode ada di [`docs/acp-client.md`](docs/acp-client.md).
-
-## Streaming chat
-
-Halaman detail episode memiliki panel chat agen dengan SSE. Teks, aktivitas tool, dan status sesi tampil bertahap; riwayat minimum disimpan di `logs/<kind>.jsonl`. Refresh dan reconnect memulihkan riwayat tanpa menjalankan agen baru.
-
-Panel memakai komponen shadcn/ui dan pola AI Elements (`MessageScroller`, `Message`, `Bubble`, `Marker`, `Trace`). Detail rute, format event, reconnect, dan pengujian ada di [`docs/streaming.md`](docs/streaming.md).
-
-## Izin agen
-
-Setiap permintaan izin ACP masuk ke antrean server dan menunggu keputusan pengguna. Panel chat menampilkan kartu izin dengan tindakan yang diminta, tombol Setujui/Tolak, dan status keputusan.
-
-Setiap keputusan dicatat di `permission_log` dengan `step_id`, ringkasan permintaan, keputusan (`approved`, `rejected`, `approved_auto`, `rejected_auto`), dan waktu. Kegagalan mencatat tidak pernah menjadi persetujuan.
-
-Mode izin otomatis harus dinyalakan eksplisit per sesi/langkah, tidak berlaku untuk izin yang sudah pending, dan reset untuk eksekusi baru. Detail aturan, rute, dan pengujian ada di [`docs/permissions.md`](docs/permissions.md).
-
-## Styling
-
-Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` mengimpor Tailwind dan tema shadcn/ui; seluruh tampilan memakai utility Tailwind. Komponen shadcn/ui dipakai untuk panel chat dan kontrolnya.
-
-## Remotion
-
-Contoh komposisi ada di folder `remotion/` dengan paket terpisah.
+## Pengujian
 
 ```bash
-cd remotion
-npm install
-npm run dev        # buka Remotion Studio untuk pratinjau
-npm run render     # render contoh ke out/example.mp4
+npm run typecheck
+npm run lint
+npm test
+npm run test:security
+npm run test:pipeline
+npm run test:dashboard
 ```
 
-## Struktur singkat
+Tes pipeline dan dashboard memakai database serta workspace sementara. `test:pipeline` menjalankan agen ACP simulasi, respons ElevenLabs simulasi, probe MP3, dan render Remotion sungguhan hingga MP4 portrait dengan audio. Diperlukan dependensi `remotion/`, `ffmpeg`, dan `ffprobe` di PATH. Render pertama dapat mengunduh browser. Tes render berat dipisahkan dari `npm test`.
 
-```
-src/app/              halaman Next.js (App Router)
-src/app/api/          route handler API
-src/app/episodes/     halaman daftar dan detail episode
-src/proxy.ts          guard keamanan untuk seluruh /api/*
-src/server/db/        koneksi, skema, dan migrasi SQLite
-src/server/episodes/  slug, repository, dan service episode
-src/server/agents/    konfigurasi dan registry proses agen
-src/server/acp/       klien ACP
-src/server/agent-streams/  session manager, riwayat, dan SSE
-src/server/security/  aturan Host/Origin dan token
-src/server/workspace/ penjaga path, whitelist, dan inisialisasi workspace
-src/components/       form, panel chat, dan komponen status episode
-src/components/ui/    komponen shadcn/ui
-tests/                tes unit
-docs/                 catatan arsitektur dan keamanan
-remotion/             proyek Remotion contoh
-data/                 database dan token runtime (tidak di-commit)
-```
+`test:dashboard` membangun aplikasi produksi dan memeriksa halaman, API, SSE, izin, editor, media range, serta persistensi setelah restart. `test:stream` menjalankan pemeriksaan integrasi yang sama. Akun agen/ElevenLabs asli dan mutu naskah/visual dari model tetap perlu diuji dengan konfigurasi pengguna.
 
-## Keamanan API
-
-Semua rute `/api/*` melewati guard yang sama:
-
-- Hanya Host `127.0.0.1:<port>` dan `localhost:<port>` yang diterima.
-- Origin harus asal aplikasi sendiri; permintaan lintas situs ditolak.
-- `GET`/`HEAD` boleh tanpa Origin; `POST`/`PUT`/`PATCH`/`DELETE` wajib Origin dan token.
-- Token acak dibuat ulang setiap server start, disimpan di `data/runtime/server-token`, dan dikirim ke UI lewat cookie `HttpOnly` + `SameSite=Strict`.
-- UI memanggil `GET /api/security/session` saat dimuat untuk mendapatkan cookie tersebut.
-
-Selengkapnya, termasuk cara menambah API baru dan cara menjalankan tes: [`docs/security.md`](docs/security.md).
-
-Jika memakai port selain `3000`, set `APP_PORT` di `.env.local` agar Host/Origin yang sah ikut menyesuaikan.
-
-## Penjaga path workspace
-
-Akses file memakai `src/server/workspace/paths.ts`:
-
-- `workspaceRoot` ditentukan aplikasi, bukan input pengguna.
-- Hanya nama file yang ada di daftar putih yang diterima.
-- Path absolut, `..`, separator folder, dan slug episode yang mencurigakan ditolak.
-- Symlink pada file atau folder perantara ditolak, termasuk untuk file baru.
-
-Daftar putih per area, aturan lengkap, dan contoh penggunaan ada di [`docs/workspace-paths.md`](docs/workspace-paths.md).
+Dokumen teknis tambahan ada di `docs/production-pipeline.md`, `docs/permissions.md`, dan `docs/agents.md`.

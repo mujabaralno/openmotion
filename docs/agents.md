@@ -6,6 +6,12 @@
 
 ## Ringkasan
 
+Pengaturan aplikasi sekarang menyediakan tombol tambah Claude Code, Codex, OpenCode, dan Command Code. Adapter memakai versi yang dipin pada `src/lib/agent-presets.ts`. Daftar agen tetap dapat disesuaikan melalui `agents.json`.
+
+Pada detail episode, panel Agen produksi membaca katalog model serta effort melalui `configOptions` ACP. Mengganti model memuat ulang effort yang didukungnya. Model dan effort diterapkan sebelum prompt, disimpan per tahap, dan tidak mengubah default CLI pengguna. Agen lama dapat memakai pemilih model legacy; effort hanya ditampilkan jika disediakan agen.
+
+Rujukan konfigurasi sesi: [ACP Session Config Options](https://agentclientprotocol.com/protocol/v1/session-config-options). Model/effort berasal dari agen yang terhubung, bukan daftar model statis aplikasi.
+
 | Agen | Dukungan ACP | Cara koneksi | Hasil uji | Kendala | Rekomendasi |
 |------|--------------|--------------|-----------|---------|-------------|
 | Claude Code | Tidak native, didukung lewat adapter resmi | `npx -y @agentclientprotocol/claude-agent-acp` (v0.102.0) | `initialize` berhasil, `session/new` berhasil | Butuh login Claude yang sudah ada; adapter Node, bukan bagian CLI Claude Code; mode default `auto` | Siap dipakai; kandidat kedua |

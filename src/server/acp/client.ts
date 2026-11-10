@@ -1,4 +1,5 @@
 import type { ChildProcess } from "node:child_process";
+import { executionOptions, parseConfigOptions, parseLegacyModels, type AgentConfigOption, type AgentSelector, type AgentExecutionOptions } from './configuration.ts';
 import {
   getAgentProcess,
   startAgentSession,
@@ -149,6 +150,9 @@ export class AcpSession {
   private appSessionId: string | null = null;
   private acpSessionId: string | null = null;
   private updates: AcpUpdate[] = [];
+  private permissionWaits = 0;
+  private configOptions: AgentConfigOption[] = [];
+  private legacyModels: AgentSelector | null = null;
   private started = false;
   private closed = false;
   private unsubscribeNotification: (() => void) | null = null;
@@ -164,6 +168,32 @@ export class AcpSession {
 
   get remoteSessionId(): string | null {
     return this.acpSessionId;
+  }
+
+  get configuration(): AgentExecutionOptions {
+    return structuredClone(executionOptions(this.configOptions, this.legacyModels));
+  }
+
+  async configure(input: { modelId?: string | null; effort?: string | null }): Promise<void> {
+    if (!this.connection || !this.acpSessionId) throw new AcpClientError('not-started', 'Sesi ACP belum dimulai.');
+    const apply = async (kind: 'model' | 'effort', value: string) => {
+      const option = this.configuration[kind];
+      const label = kind === 'model' ? 'Model' : 'Effort';
+      if (!option) throw new AcpClientError('invalid-response', `${label} tidak dapat diatur melalui ACP agen ini. Pilih agen yang mendukungnya.`);
+      if (!option.options.some(choice => choice.value === value)) throw new AcpClientError('invalid-response', `${label} "${value}" tidak tersedia untuk agen/model ini. Muat ulang pilihan.`);
+      if (option.currentValue === value) return;
+      if (kind === 'model' && option.id === 'legacy-model') {
+        await this.connection!.request('session/set_model', { sessionId: this.acpSessionId, modelId: value }, { timeoutMs: this.options.initializeTimeoutMs ?? 15000 });
+        this.legacyModels!.currentValue = value;
+      } else {
+        const result = await this.connection!.request<unknown>('session/set_config_option', { sessionId: this.acpSessionId, configId: option.id, value }, { timeoutMs: this.options.initializeTimeoutMs ?? 15000 });
+        if (isRecord(result) && Array.isArray(result.configOptions)) this.configOptions = parseConfigOptions(result.configOptions);
+        if (this.configuration[kind]?.currentValue !== value) throw new AcpClientError('invalid-response', `Agen tidak mengonfirmasi perubahan ${label.toLowerCase()}. Prompt belum dikirim.`);
+      }
+    };
+    // Effort choices may change after switching the model.
+    if (input.modelId) await apply('model', input.modelId);
+    if (input.effort) await apply('effort', input.effort);
   }
 
   private log(line: string) {
@@ -194,6 +224,7 @@ export class AcpSession {
     }
 
     const typedUpdate = update as AcpUpdate;
+    if (update.sessionUpdate === 'config_option_update' && Array.isArray(update.configOptions)) this.configOptions = parseConfigOptions(update.configOptions);
     this.updates.push(typedUpdate);
 
     try {
@@ -218,6 +249,8 @@ export class AcpSession {
     const options = parsePermissionOptions(params.options);
     const toolCall = isRecord(params.toolCall)
       ? {
+          rawInput: params.toolCall.rawInput,
+          locations: params.toolCall.locations,
           toolCallId:
             typeof params.toolCall.toolCallId === "string"
               ? params.toolCall.toolCallId
@@ -243,7 +276,14 @@ export class AcpSession {
       let decision: AcpPermissionDecision;
 
       try {
-        decision = await this.options.onPermissionRequest(request);
+        this.permissionWaits += 1;
+        this.connection?.pauseTimeout("session/prompt");
+        try {
+          decision = await this.options.onPermissionRequest(request);
+        } finally {
+          this.permissionWaits -= 1;
+          if (this.permissionWaits === 0) this.connection?.resumeTimeout("session/prompt");
+        }
       } catch (error) {
         this.log(
           `[acp] Handler izin gagal; permintaan ditolak: ${error instanceof Error ? error.message : String(error)}`,
@@ -265,9 +305,7 @@ export class AcpSession {
       return decision;
     }
 
-    const rejectOption = options.find((option) =>
-      option.kind.startsWith("reject"),
-    );
+    const rejectOption = options.find((option) => option.kind === "reject_once");
 
     this.log(
       "[acp] Permintaan izin ditolak otomatis karena belum ada handler izin.",
@@ -357,15 +395,22 @@ export class AcpSession {
       }
 
       this.acpSessionId = sessionResult.sessionId;
+      this.configOptions = parseConfigOptions(sessionResult.configOptions);
+      this.legacyModels = parseLegacyModels(sessionResult.models);
       this.unsubscribeNotification = this.connection.onNotification(
         (method, params) => this.handleNotification(method, params),
       );
       this.unsubscribePermission = this.connection.onRequest(
         "session/request_permission",
-        async (params) => ({
-          outcome: await this.handlePermission(params),
-        }),
+        async (params) => ({ outcome: await this.handlePermission(params) }),
       );
+      // Prefer an explicit manual-permission mode when the agent advertises one.
+      const modes = isRecord(sessionResult.modes) ? sessionResult.modes : null;
+      const available = modes && Array.isArray(modes.availableModes) ? modes.availableModes : [];
+      const manualMode = ['default', 'workspace-write'].find(id => available.some((mode: unknown) => isRecord(mode) && mode.id === id));
+      if (manualMode) {
+        await this.connection.request("session/set_mode", { sessionId: this.acpSessionId, modeId: manualMode }, { timeoutMs: initializeTimeoutMs });
+      }
       this.started = true;
     } catch (error) {
       await this.close();
@@ -390,7 +435,7 @@ export class AcpSession {
           sessionId: this.acpSessionId,
           prompt: [{ type: "text", text }],
         },
-        { timeoutMs: this.options.promptTimeoutMs ?? 60000 },
+        { timeoutMs: this.options.promptTimeoutMs ?? 30 * 60 * 1000 },
       );
 
       if (

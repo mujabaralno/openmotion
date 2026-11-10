@@ -16,6 +16,7 @@ const projectDirectory = fs.mkdtempSync(path.join(root, ".next-smoke-"));
 
 for (const entry of [
   "src",
+  "agents",
   "package.json",
   "next.config.ts",
   "tsconfig.json",

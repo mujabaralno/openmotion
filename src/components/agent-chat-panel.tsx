@@ -1,7 +1,21 @@
 "use client";
 
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { ShieldAlertIcon, WrenchIcon } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import {
+  AlertIcon,
+  CheckIcon,
+  ShieldIcon,
+  SparkIcon,
+  TerminalIcon,
+  WrenchIcon,
+  XIcon,
+} from "@/components/icons";
+import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
 import { Bubble, BubbleContent } from "@/components/ui/bubble";
 import { Button } from "@/components/ui/button";
@@ -22,15 +36,6 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
-import { Marker, MarkerContent, MarkerIcon } from "@/components/ui/marker";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import {
   Trace,
@@ -47,8 +52,6 @@ import type {
   PermissionRecord,
 } from "@/server/agent-streams/types";
 import type { StepKind } from "@/server/db";
-
-const STEP_OPTIONS = Object.keys(STEP_LABELS) as StepKind[];
 
 type ChatMessage = {
   id: string;
@@ -72,11 +75,6 @@ type ConnectionState =
   | "done"
   | "error";
 
-type AgentSummary = {
-  id: string;
-  name: string;
-};
-
 const SESSION_LABELS: Record<AgentStreamStatus, string> = {
   idle: "Belum ada sesi",
   running: "Berjalan",
@@ -93,22 +91,53 @@ const CONNECTION_LABELS: Record<ConnectionState, string> = {
   error: "Koneksi gagal",
 };
 
-function connectionVariant(
-  state: ConnectionState,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (state === "error") return "destructive";
-  if (state === "open") return "default";
-  if (state === "reconnecting" || state === "connecting") return "outline";
-  return "secondary";
+type StatusTone = "accent" | "success" | "danger" | "warning" | "muted";
+
+const STATUS_TONE_CLASSES: Record<StatusTone, string> = {
+  accent: "border-primary/30 bg-primary/10 text-primary",
+  success: "border-emerald-500/25 bg-emerald-500/10 text-emerald-300",
+  danger: "border-destructive/30 bg-destructive/10 text-destructive",
+  warning: "border-amber-500/25 bg-amber-500/10 text-amber-300",
+  muted: "border-white/10 bg-white/[0.03] text-muted-foreground",
+};
+
+function connectionTone(state: ConnectionState): StatusTone {
+  if (state === "error") return "danger";
+  if (state === "open") return "accent";
+  if (state === "connecting" || state === "reconnecting") return "warning";
+  if (state === "done") return "success";
+  return "muted";
 }
 
-function sessionVariant(
-  status: AgentStreamStatus,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (status === "failed") return "destructive";
-  if (status === "completed") return "default";
-  if (status === "running") return "secondary";
-  return "outline";
+function sessionTone(status: AgentStreamStatus): StatusTone {
+  if (status === "failed") return "danger";
+  if (status === "completed") return "success";
+  if (status === "running") return "accent";
+  return "muted";
+}
+
+function StatusPill({
+  tone,
+  children,
+  pulse = false,
+}: {
+  tone: StatusTone;
+  children: ReactNode;
+  pulse?: boolean;
+}) {
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 font-mono text-[10px] uppercase tracking-[0.1em]",
+        STATUS_TONE_CLASSES[tone],
+      )}
+    >
+      {pulse ? (
+        <span className="animate-soft-pulse size-1 rounded-full bg-current" />
+      ) : null}
+      {children}
+    </span>
+  );
 }
 
 function toolStatusLabel(status: string): string {
@@ -140,18 +169,60 @@ function permissionStatusLabel(permission: PermissionRecord): string {
   return "Gagal";
 }
 
-function permissionStatusVariant(
-  permission: PermissionRecord,
-): "default" | "secondary" | "destructive" | "outline" {
-  if (permission.status === "approved") return "default";
+function permissionTone(permission: PermissionRecord): StatusTone {
+  if (permission.status === "approved") return "success";
   if (permission.status === "rejected" || permission.status === "failed") {
-    return "destructive";
+    return "danger";
   }
-  if (permission.status === "pending") return "outline";
-  return "secondary";
+  if (permission.status === "pending") return "warning";
+  return "muted";
 }
 
-function AgentStreamView({
+function InlineError({ message }: { message: string }) {
+  return (
+    <div
+      className="flex gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-3.5 py-3 text-sm text-destructive"
+      role="alert"
+    >
+      <AlertIcon className="mt-0.5 size-4 shrink-0" />
+      <p>{message}</p>
+    </div>
+  );
+}
+
+function ConsoleEmptyState({
+  connection,
+}: {
+  connection: ConnectionState;
+}) {
+  if (connection === "connecting") {
+    return (
+      <div className="flex min-h-[18rem] flex-col justify-center gap-3 px-1">
+        <span className="h-3 w-28 animate-pulse rounded-full bg-white/10" />
+        <span className="h-3 w-4/5 animate-pulse rounded-full bg-white/[0.06]" />
+        <span className="h-3 w-3/5 animate-pulse rounded-full bg-white/[0.05]" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex min-h-[18rem] flex-col items-center justify-center px-6 text-center">
+      <span className="flex size-12 items-center justify-center rounded-full border border-white/10 bg-white/[0.04] text-primary">
+        <TerminalIcon className="size-5" />
+      </span>
+      <p className="mt-4 text-sm font-medium text-foreground">
+        Console siap menerima sesi.
+      </p>
+      <p className="mt-1.5 max-w-[36ch] text-xs leading-relaxed text-muted-foreground">
+        {connection === "reconnecting"
+          ? "Menyambung ulang ke riwayat sesi..."
+          : "Pilih agen dan kirim prompt. Riwayat sesi aktif akan muncul di sini."}
+      </p>
+    </div>
+  );
+}
+
+export function AgentStreamView({
   episodeSlug,
   kind,
 }: {
@@ -503,61 +574,128 @@ function AgentStreamView({
     messages.length === 0 && tools.length === 0;
 
   return (
-    <div>
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Badge variant={connectionVariant(connection)}>
-          {CONNECTION_LABELS[connection]}
-        </Badge>
-        <Badge variant={sessionVariant(sessionStatus)}>
-          {SESSION_LABELS[sessionStatus]}
-        </Badge>
+    <div className="grid min-w-0 gap-5">
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusPill
+            tone={connectionTone(connection)}
+            pulse={connection === "open"}
+          >
+            {CONNECTION_LABELS[connection]}
+          </StatusPill>
+          <StatusPill
+            tone={sessionTone(sessionStatus)}
+            pulse={sessionStatus === "running"}
+          >
+            {SESSION_LABELS[sessionStatus]}
+          </StatusPill>
+        </div>
+        <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted-foreground">
+          Live stream / SSE
+        </span>
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2">
-        <div className="flex items-start gap-3">
-          <Switch
-            checked={autoApprove}
-            onCheckedChange={() => {
-              void toggleAutoApprove();
-            }}
-            disabled={!canToggleAuto || autoPending}
-            aria-label="Mode izin otomatis"
-          />
-          <div>
-            <p className="text-sm font-medium">Mode izin otomatis</p>
-            <p className="text-xs text-muted-foreground">
-              Berlaku hanya untuk langkah ini. Permintaan yang sudah
-              menunggu tetap membutuhkan keputusan manual.
-            </p>
+      <div className="min-w-0 rounded-2xl border border-white/10 bg-white/[0.025] p-3.5 sm:p-4">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <span
+              className={cn(
+                "mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full border",
+                autoApprove
+                  ? "border-primary/30 bg-primary/15 text-primary"
+                  : "border-white/10 bg-white/5 text-muted-foreground",
+              )}
+            >
+              <SparkIcon className="size-4" />
+            </span>
+            <div>
+              <p className="text-sm font-medium text-foreground">
+                Mode izin otomatis
+              </p>
+              <p className="mt-1 max-w-[58ch] text-xs leading-relaxed text-muted-foreground">
+                Berlaku hanya untuk langkah ini. Permintaan yang sudah
+                menunggu tetap membutuhkan keputusan manual.
+              </p>
+            </div>
           </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {autoApprove ? <Badge>Auto-izin aktif</Badge> : null}
-          {pendingPermissionCount > 0 ? (
-            <Badge variant="outline">
-              {pendingPermissionCount} izin menunggu
-            </Badge>
-          ) : null}
+
+          <div className="flex flex-wrap items-center gap-2 sm:flex-col sm:items-end">
+            <div className="flex items-center gap-2">
+              <span className="font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                {autoApprove ? "ON" : "OFF"}
+              </span>
+              <Switch
+                checked={autoApprove}
+                onCheckedChange={() => {
+                  void toggleAutoApprove();
+                }}
+                disabled={!canToggleAuto || autoPending}
+                aria-label="Mode izin otomatis"
+              />
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {autoApprove ? (
+                <StatusPill tone="accent">Auto-izin aktif</StatusPill>
+              ) : null}
+              {pendingPermissionCount > 0 ? (
+                <StatusPill tone="warning">
+                  {pendingPermissionCount} izin menunggu
+                </StatusPill>
+              ) : null}
+            </div>
+          </div>
         </div>
       </div>
 
       {permissionList.length > 0 ? (
-        <div className="mb-3 grid gap-2">
+        <div className="grid min-w-0 gap-2.5" aria-live="polite">
           {permissionList.map((permission) => (
-            <Item key={permission.id} variant="outline" size="sm">
+            <Item
+              key={permission.id}
+              variant="outline"
+              size="sm"
+              className={cn(
+                "min-w-0 border-white/10 bg-white/[0.03] text-foreground",
+                permission.status === "pending" &&
+                  "border-primary/35 bg-primary/[0.055]",
+              )}
+            >
               <ItemMedia variant="icon">
-                <ShieldAlertIcon />
+                <span
+                  className={cn(
+                    "flex size-8 items-center justify-center rounded-full border",
+                    permission.status === "pending"
+                      ? "border-primary/30 bg-primary/10 text-primary"
+                      : "border-white/10 bg-white/5 text-muted-foreground",
+                  )}
+                >
+                  <ShieldIcon className="size-4" />
+                </span>
               </ItemMedia>
-              <ItemContent>
-                <ItemTitle>{permission.title}</ItemTitle>
-                <ItemDescription>{permission.summary}</ItemDescription>
+              <ItemContent className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <ItemTitle className="max-w-full break-words [overflow-wrap:anywhere] text-foreground">
+                    {permission.title}
+                  </ItemTitle>
+                  {permission.auto ? (
+                    <Badge
+                      variant="outline"
+                      className="border-primary/30 font-mono text-[10px] uppercase tracking-[0.08em] text-primary"
+                    >
+                      Auto
+                    </Badge>
+                  ) : null}
+                </div>
+                <ItemDescription className="line-clamp-none whitespace-pre-wrap break-words [overflow-wrap:anywhere] text-muted-foreground">
+                  {permission.summary}
+                </ItemDescription>
                 {permission.error ? (
-                  <p className="text-xs text-destructive">
+                  <p className="break-words [overflow-wrap:anywhere] text-xs text-destructive">
                     {permission.error}
                   </p>
                 ) : null}
               </ItemContent>
-              <ItemActions>
+              <ItemActions className="w-full justify-end sm:w-auto">
                 {permission.status === "pending" &&
                 sessionStatus === "running" ? (
                   <>
@@ -565,6 +703,7 @@ function AgentStreamView({
                       type="button"
                       size="sm"
                       variant="outline"
+                      className="border-white/10 bg-transparent text-muted-foreground hover:bg-white/5 hover:text-foreground"
                       disabled={Boolean(deciding[permission.id])}
                       onClick={() => {
                         void decidePermission(
@@ -573,11 +712,13 @@ function AgentStreamView({
                         );
                       }}
                     >
+                      <XIcon className="size-3.5" />
                       Tolak
                     </Button>
                     <Button
                       type="button"
                       size="sm"
+                      className="bg-primary text-primary-foreground hover:brightness-105"
                       disabled={Boolean(deciding[permission.id])}
                       onClick={() => {
                         void decidePermission(
@@ -586,21 +727,16 @@ function AgentStreamView({
                         );
                       }}
                     >
+                      <CheckIcon className="size-3.5" />
                       Setujui
                     </Button>
                   </>
                 ) : (
-                  <Badge
-                    variant={
-                      permission.status === "pending"
-                        ? "secondary"
-                        : permissionStatusVariant(permission)
-                    }
-                  >
+                  <StatusPill tone={permissionTone(permission)}>
                     {permission.status === "pending"
                       ? "Sesi tidak aktif"
                       : permissionStatusLabel(permission)}
-                  </Badge>
+                  </StatusPill>
                 )}
               </ItemActions>
             </Item>
@@ -608,310 +744,116 @@ function AgentStreamView({
         </div>
       ) : null}
 
-      {error ? (
-        <p
-          className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
+      {error ? <InlineError message={error} /> : null}
 
-      <div className="h-[30rem] overflow-hidden rounded-xl border bg-background">
-        <MessageScrollerProvider autoScroll>
-          <MessageScroller>
-            <MessageScrollerViewport>
-              <MessageScrollerContent className="p-4">
-                {showEmptyState ? (
-                  <MessageScrollerItem messageId="empty-state">
-                    <Marker>
-                      <MarkerIcon>
-                        <WrenchIcon />
-                      </MarkerIcon>
-                      <MarkerContent>
-                        {connection === "connecting"
-                          ? "Memuat riwayat..."
-                          : connection === "reconnecting"
-                            ? "Menyambung ulang..."
-                            : "Belum ada percakapan untuk langkah ini."}
-                      </MarkerContent>
-                    </Marker>
-                  </MessageScrollerItem>
-                ) : null}
-
-                {messages.map((message) => (
-                  <MessageScrollerItem
-                    key={message.id}
-                    messageId={message.id}
-                    scrollAnchor={message.role === "user"}
-                  >
-                    <Message
-                      align={message.role === "user" ? "end" : "start"}
+      <div className="relative overflow-hidden rounded-2xl border border-white/10 bg-black/20">
+        <div
+          aria-hidden="true"
+          className="bg-blueprint-dark pointer-events-none absolute inset-0 opacity-60"
+        />
+        <div className="relative h-[clamp(22rem,45vh,34rem)]">
+          <MessageScrollerProvider autoScroll>
+            <MessageScroller>
+              <MessageScrollerViewport>
+                <MessageScrollerContent className="gap-4 p-4 sm:p-5">
+                  {showEmptyState ? (
+                    <MessageScrollerItem
+                      messageId="empty-state"
+                      className="flex min-h-[18rem] items-center justify-center"
                     >
-                      <MessageContent>
-                        <Bubble
-                          align={message.role === "user" ? "end" : "start"}
-                          variant={
-                            message.role === "user" ? "muted" : "ghost"
-                          }
-                        >
-                          <BubbleContent className="whitespace-pre-wrap">
-                            {message.text}
-                          </BubbleContent>
-                        </Bubble>
-                      </MessageContent>
-                    </Message>
-                  </MessageScrollerItem>
-                ))}
+                      <ConsoleEmptyState connection={connection} />
+                    </MessageScrollerItem>
+                  ) : null}
 
-                {tools.length > 0 ? (
-                  <MessageScrollerItem messageId="tool-activity">
-                    <Message>
-                      <MessageContent>
-                        <Trace>
-                          {tools.map((tool) => (
-                            <TraceLine
-                              key={tool.id}
-                              status={traceStatus(tool.status)}
-                            >
-                              <TraceIcon>
-                                <WrenchIcon />
-                              </TraceIcon>
-                              <TraceTitle>{tool.title}</TraceTitle>
-                              <TraceDescription>
-                                {toolStatusLabel(tool.status)}
-                              </TraceDescription>
-                            </TraceLine>
-                          ))}
-                        </Trace>
-                      </MessageContent>
-                    </Message>
-                  </MessageScrollerItem>
-                ) : null}
-              </MessageScrollerContent>
-            </MessageScrollerViewport>
-            <MessageScrollerButton />
-          </MessageScroller>
-        </MessageScrollerProvider>
+                  {messages.map((message) => (
+                    <MessageScrollerItem
+                      key={message.id}
+                      messageId={message.id}
+                      scrollAnchor={message.role === "user"}
+                      className="animate-rise"
+                    >
+                      <Message
+                        align={message.role === "user" ? "end" : "start"}
+                      >
+                        <MessageContent>
+                          <p
+                            className={cn(
+                              "mb-1.5 font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground",
+                              message.role === "user" && "text-right",
+                            )}
+                          >
+                            {message.role === "user" ? "Anda" : "Agen"}
+                          </p>
+                          <Bubble
+                            align={
+                              message.role === "user" ? "end" : "start"
+                            }
+                            variant="ghost"
+                            className={cn(
+                              "max-w-[88%] rounded-2xl border px-3.5 py-2.5 text-sm leading-relaxed",
+                              message.role === "user"
+                                ? "border-primary/25 bg-primary text-primary-foreground"
+                                : "border-white/5 bg-white/[0.04] text-foreground",
+                            )}
+                          >
+                            <BubbleContent className="break-words whitespace-pre-wrap">
+                              {message.text}
+                            </BubbleContent>
+                          </Bubble>
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  ))}
+
+                  {tools.length > 0 ? (
+                    <MessageScrollerItem
+                      messageId="tool-activity"
+                      className="animate-rise"
+                    >
+                      <Message>
+                        <MessageContent>
+                          <div className="rounded-xl border border-white/10 bg-white/[0.025] p-3">
+                            <div className="mb-2 flex items-center justify-between font-mono text-[10px] uppercase tracking-[0.14em] text-muted-foreground">
+                              <span>Tool activity</span>
+                              <span>{String(tools.length).padStart(2, "0")}</span>
+                            </div>
+                            <Trace>
+                              {tools.map((tool) => (
+                                <TraceLine
+                                  key={tool.id}
+                                  status={traceStatus(tool.status)}
+                                >
+                                  <TraceIcon>
+                                    <WrenchIcon />
+                                  </TraceIcon>
+                                  <TraceTitle>{tool.title}</TraceTitle>
+                                  <TraceDescription>
+                                    {toolStatusLabel(tool.status)}
+                                  </TraceDescription>
+                                </TraceLine>
+                              ))}
+                            </Trace>
+                          </div>
+                        </MessageContent>
+                      </Message>
+                    </MessageScrollerItem>
+                  ) : null}
+                </MessageScrollerContent>
+              </MessageScrollerViewport>
+              <MessageScrollerButton />
+            </MessageScroller>
+          </MessageScrollerProvider>
+        </div>
       </div>
 
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-        <span>Langkah: {STEP_LABELS[kind]}</span>
+      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-white/10 pt-3 font-mono text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+        <span>Langkah / {STEP_LABELS[kind]}</span>
         {attemptId ? (
-          <>
-            <span aria-hidden="true">·</span>
-            <span className="font-mono">
-              Percobaan {attemptId.slice(0, 8)}
-            </span>
-          </>
-        ) : null}
+          <span>Percobaan / {attemptId.slice(0, 8)}</span>
+        ) : (
+          <span>Menunggu sesi</span>
+        )}
       </div>
     </div>
-  );
-}
-
-export function AgentChatPanel({ episodeSlug }: { episodeSlug: string }) {
-  const [kind, setKind] = useState<StepKind>("script");
-  const [agents, setAgents] = useState<AgentSummary[]>([]);
-  const [agentId, setAgentId] = useState("");
-  const [prompt, setPrompt] = useState(
-    "Halo, ini uji streaming dari Workflow Studio.",
-  );
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [configError, setConfigError] = useState<string | null>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-
-  useEffect(() => {
-    let active = true;
-
-    fetch("/api/agents", { cache: "no-store" })
-      .then(async (response) => {
-        const data = (await response.json().catch(() => null)) as
-          | { agents?: AgentSummary[]; error?: string; fix?: string }
-          | null;
-
-        if (!active) return;
-
-        if (!response.ok) {
-          setConfigError(
-            [data?.error, data?.fix].filter(Boolean).join(" ") ||
-              "Gagal membaca daftar agen.",
-          );
-          return;
-        }
-
-        const nextAgents = data?.agents ?? [];
-        setAgents(nextAgents);
-        setAgentId((current) => current || nextAgents[0]?.id || "");
-      })
-      .catch((fetchError: unknown) => {
-        if (!active) return;
-        setConfigError(
-          fetchError instanceof Error
-            ? fetchError.message
-            : "Gagal membaca daftar agen.",
-        );
-      });
-
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  async function startSession(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    if (pending) return;
-
-    const cleanPrompt = prompt.trim();
-    if (!cleanPrompt) {
-      setError("Prompt wajib diisi.");
-      return;
-    }
-
-    if (!agentId) {
-      setError("Pilih agen terlebih dahulu.");
-      return;
-    }
-
-    setPending(true);
-    setError(null);
-
-    try {
-      const security = await fetch("/api/security/session", {
-        credentials: "same-origin",
-        cache: "no-store",
-      });
-
-      if (!security.ok) {
-        throw new Error("Sesi keamanan belum siap. Muat ulang halaman.");
-      }
-
-      const response = await fetch(
-        `/api/episodes/${encodeURIComponent(episodeSlug)}/steps/${kind}/run`,
-        {
-          method: "POST",
-          credentials: "same-origin",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ agentId, prompt: cleanPrompt }),
-        },
-      );
-
-      const data = (await response.json().catch(() => null)) as
-        | { error?: string; fix?: string }
-        | null;
-
-      if (!response.ok) {
-        setError(
-          [data?.error, data?.fix].filter(Boolean).join(" ") ||
-            "Gagal memulai sesi agen.",
-        );
-
-        if (response.status === 409) {
-          setReloadToken((value) => value + 1);
-        }
-
-        return;
-      }
-
-      setReloadToken((value) => value + 1);
-    } catch (startError) {
-      setError(
-        startError instanceof Error
-          ? startError.message
-          : "Gagal memulai sesi agen.",
-      );
-    } finally {
-      setPending(false);
-    }
-  }
-
-  return (
-    <section className="mt-5 rounded-xl border bg-card p-5 text-card-foreground shadow-sm">
-      <div>
-        <h2 className="text-lg font-semibold">Chat agen</h2>
-        <p className="text-sm text-muted-foreground">
-          Ikuti keluaran agen untuk langkah yang dipilih. Membuka atau
-          menyegarkan halaman tidak menjalankan agen.
-        </p>
-      </div>
-
-      <div className="mt-4 flex flex-wrap gap-2">
-        {STEP_OPTIONS.map((option) => (
-          <Button
-            key={option}
-            type="button"
-            size="sm"
-            variant={option === kind ? "default" : "outline"}
-            onClick={() => setKind(option)}
-          >
-            {STEP_LABELS[option]}
-          </Button>
-        ))}
-      </div>
-
-      {configError ? (
-        <p className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {configError}
-        </p>
-      ) : null}
-
-      <form
-        className="mt-4 grid gap-3 rounded-lg border bg-muted/30 p-3"
-        onSubmit={startSession}
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-sm font-medium">Sesi uji</span>
-          <Select
-            value={agentId}
-            onValueChange={(value) => setAgentId(value ?? "")}
-          >
-            <SelectTrigger className="w-full sm:w-56" aria-label="Agen">
-              <SelectValue placeholder="Pilih agen" />
-            </SelectTrigger>
-            <SelectContent>
-              {agents.map((agent) => (
-                <SelectItem key={agent.id} value={agent.id}>
-                  {agent.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button type="submit" disabled={pending || !agentId}>
-            {pending ? "Memulai..." : "Mulai sesi"}
-          </Button>
-        </div>
-        <Textarea
-          value={prompt}
-          onChange={(event) => setPrompt(event.target.value)}
-          rows={2}
-          maxLength={20000}
-          placeholder="Prompt untuk agen..."
-          disabled={pending}
-        />
-        <p className="text-xs text-muted-foreground">
-          Memakai agen dari <code>agents.json</code>. Ini kontrol uji
-          sementara, bukan aturan pipeline.
-        </p>
-      </form>
-
-      {error ? (
-        <p
-          className="mt-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-
-      <div className="mt-4">
-        <AgentStreamView
-          key={`${episodeSlug}:${kind}:${reloadToken}`}
-          episodeSlug={episodeSlug}
-          kind={kind}
-        />
-      </div>
-    </section>
   );
 }

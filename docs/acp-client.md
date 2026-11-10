@@ -74,7 +74,7 @@ Jika handler diberikan, hasilnya divalidasi:
 
 ## Timeout dan kegagalan
 
-Default: initialize/session 15 detik, prompt 60 detik. Semua dapat diatur melalui `initializeTimeoutMs` dan `promptTimeoutMs`.
+Default: initialize/session 15 detik, prompt 30 menit. Timeout prompt dijeda selama menunggu keputusan izin pengguna. Semua dapat diatur melalui `initializeTimeoutMs` dan `promptTimeoutMs`.
 
 - Prompt yang timeout mengirim `session/cancel`, lalu menutup sesi.
 - Proses yang berhenti menolak semua request yang menunggu dengan error `connection-lost`.
@@ -125,7 +125,7 @@ Uji ini melewati klien ACP aplikasi, bukan hanya skrip handshake S1.
 
 ## Batasan
 
-- Panel chat/SSE, antrean izin, UI, dan pembatalan menyeluruh belum termasuk; masing-masing M1-4 sampai M1-6.
-- Transkrip permanen belum disimpan; M1-7.
+- Panel chat/SSE, antrean izin, dan pembatalan kini terhubung melalui pipeline dashboard; lihat docs/production-pipeline.md.
+- Transkrip per langkah disimpan dalam JSONL dan disaring sebelum streaming/persistensi.
 - Klien saat ini menangani satu agen per sesi.
 - Fallback CLI dan multi-agen mengikuti M5.

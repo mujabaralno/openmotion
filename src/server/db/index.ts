@@ -112,6 +112,24 @@ const MIGRATIONS: readonly Migration[] = [
       `);
     },
   },
+  {
+    version: 2,
+    name: "pipeline-revision-notes",
+    up(db) {
+      const columns = db.prepare("PRAGMA table_info(steps)").all() as {name: string}[];
+      if (!columns.some(column => column.name === "notes")) db.exec("ALTER TABLE steps ADD COLUMN notes TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    version: 3,
+    name: 'step-model-and-effort',
+    up(db) {
+      const columns = db.prepare('PRAGMA table_info(steps)').all() as { name: string }[];
+      for (const column of ['model_id', 'effort']) {
+        if (!columns.some(existing => existing.name === column)) db.exec(`ALTER TABLE steps ADD COLUMN ${column} TEXT`);
+      }
+    },
+  },
 ];
 
 function createMigrationsTable(db: Database.Database): void {
