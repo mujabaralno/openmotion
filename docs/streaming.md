@@ -20,6 +20,8 @@ Membuka stream, refresh, atau reconnect **tidak** memulai proses agen dan tidak 
 | `GET` | `/api/agents` | Daftar `id`/`name` agen dari `agents.json` |
 | `POST` | `/api/episodes/:slug/steps/:kind/run` | Kontrol uji: mulai sesi agen untuk langkah |
 | `GET` | `/api/episodes/:slug/steps/:kind/stream` | SSE riwayat + update live |
+| `POST` | `/api/permissions/:id` | Keputusan izin manual |
+| `POST` | `/api/episodes/:slug/steps/:kind/permissions/auto` | Toggle auto-izin untuk sesi aktif |
 
 Semua rute `/api/*` melewati guard keamanan. `POST` membutuhkan Origin dan token. SSE adalah `GET`; browser EventSource mengirim cookie yang diperlukan secara same-origin.
 
@@ -48,6 +50,8 @@ Event:
 - `prompt` — prompt pengguna.
 - `update` — `session/update` ACP (teks, tool call, update tool).
 - `status` — `idle`, `running`, `completed`, atau `failed`.
+- `permission` — permintaan izin dan perubahan statusnya.
+- `permission-mode` — auto-izin dinyalakan/dimatikan untuk sesi aktif.
 
 Heartbeat `: ping` dikirim setiap 15 detik saat sesi masih berjalan.
 
@@ -72,6 +76,7 @@ Lokasi: `episodes/<slug>/logs/<kind>.jsonl` di workspace, dibuat dengan permissi
 - Urutan `seq` unik per attempt.
 - Attempt terbaru ditentukan dari urutan baris.
 - Baris rusak diabaikan saat pembacaan.
+- Event status, update, prompt, permission, dan permission-mode ikut tersimpan.
 - Log tidak berisi token aplikasi atau kredensial dari registry.
 
 ## Panel chat
@@ -82,7 +87,7 @@ Menggunakan pola dan komponen shadcn/ui:
 
 - `MessageScroller`, `Message`, `Bubble`, `Marker` untuk thread dan status.
 - `Trace`, `TraceLine`, `TraceIcon`, `TraceTitle` untuk aktivitas tool.
-- `Badge`, `Button`, `Select`, `Textarea` untuk status dan kontrol sesi.
+- `Item`, `Button`, `Badge`, `Switch` untuk kartu izin dan mode otomatis.
 
 Perilaku:
 
@@ -94,7 +99,11 @@ Perilaku:
 - Deduplikasi berdasarkan `attemptId:seq`.
 - Pindah langkah atau memulai attempt baru me-remount feed, sehingga state tidak tercampur.
 - Panel ditutup saat pindah halaman/komponen unmount; agen tidak dihentikan.
+- Kartu izin menampilkan tindakan dan tombol Setujui/Tolak; setelah sesi berakhir kartu menjadi tidak aktif.
+- Switch auto-izin hanya berlaku untuk sesi/langkah yang sedang aktif.
 - Kontrol “Sesi uji” memilih agen dan mengirim prompt untuk menguji alur; ini bukan aturan pipeline.
+
+Detail izin dan auto-izin ada di [`permissions.md`](permissions.md).
 
 ## Pengujian
 
@@ -135,7 +144,6 @@ npm run test:security
 
 ## Batasan
 
-- Antrean izin dan keputusan pengguna mengikuti M1-5. Saat ini permintaan izin ditolak default oleh klien ACP.
 - Tombol pembatalan dan penghentian sesi menyeluruh mengikuti M1-6.
 - Redaksi rahasia dan transkrip lengkap mengikuti M1-7.
 - Status `steps` di SQLite belum diubah oleh kontrol streaming; pipeline/approval mengikuti issue berikutnya.

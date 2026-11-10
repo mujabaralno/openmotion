@@ -5,6 +5,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import Database from "better-sqlite3";
 
 const root = path.resolve(fileURLToPath(new URL("..", import.meta.url)));
 const nextBin = path.join(root, "node_modules", "next", "dist", "bin", "next");
@@ -44,6 +45,34 @@ fs.writeFileSync(
         name: "Mock Slow",
         command: process.execPath,
         args: [mockPath, "--scenario", "stream", "--delay-ms", "150"],
+      },
+      {
+        id: "mock-permission-manual",
+        name: "Mock Permission Manual",
+        command: process.execPath,
+        args: [
+          mockPath,
+          "--scenario",
+          "permission",
+          "--delay-ms",
+          "50",
+          "--file-name",
+          "manual-output.txt",
+        ],
+      },
+      {
+        id: "mock-permission-auto",
+        name: "Mock Permission Auto",
+        command: process.execPath,
+        args: [
+          mockPath,
+          "--scenario",
+          "permission",
+          "--delay-ms",
+          "200",
+          "--file-name",
+          "auto-output.txt",
+        ],
       },
     ],
   }),
@@ -262,6 +291,15 @@ async function collectSse(port, requestPath, options = {}) {
       events.push(event);
 
       if (
+        options.stopOnPermission &&
+        event.event === "permission" &&
+        event.data?.permission?.status === "pending"
+      ) {
+        connection.abort();
+        return;
+      }
+
+      if (
         options.stopOnFirstUpdate &&
         event.event === "update" &&
         event.data?.update?.sessionUpdate === "agent_message_chunk"
@@ -328,6 +366,22 @@ async function waitForLogStatus(slug, kind, status) {
   }
 
   throw new Error(`Timeout menunggu status ${status} di log.`);
+}
+
+function readPermissionDecisions() {
+  const db = new Database(
+    path.join(projectDir, "data", "app.db"),
+    { readonly: true },
+  );
+
+  try {
+    return db
+      .prepare("SELECT decision FROM permission_log ORDER BY id")
+      .all()
+      .map((row) => row.decision);
+  } finally {
+    db.close();
+  }
 }
 
 try {
@@ -544,6 +598,159 @@ try {
     combinedSeqs.every(
       (seq, index) => seq === expectedSeqs[index],
     ),
+  );
+
+  const manualOutput = path.join(
+    workspaceDir,
+    "episodes",
+    slug,
+    "manual-output.txt",
+  );
+  const permissionRun = await request(port, {
+    method: "POST",
+    requestPath: `/api/episodes/${slug}/steps/voiceover/run`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({
+      agentId: "mock-permission-manual",
+      prompt: "Tulis manual",
+    }),
+  });
+  check("sesi izin manual dimulai", permissionRun.status === 201);
+
+  const permissionPart = await collectSse(
+    port,
+    `/api/episodes/${slug}/steps/voiceover/stream`,
+    { stopOnPermission: true },
+  );
+  const pendingEvent = permissionPart.events.find(
+    (event) =>
+      event.event === "permission" &&
+      event.data?.permission?.status === "pending",
+  );
+  const permissionId = pendingEvent?.data?.permission?.id;
+
+  check("izin pending muncul lewat SSE", Boolean(permissionId));
+  check("file belum ditulis sebelum keputusan", !fs.existsSync(manualOutput));
+
+  if (!permissionId) {
+    throw new Error("ID izin pending tidak ditemukan.");
+  }
+
+  const invalidDecision = await request(port, {
+    method: "POST",
+    requestPath: `/api/permissions/${permissionId}`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({ decision: "maybe" }),
+  });
+  check("keputusan tidak valid ditolak", invalidDecision.status === 400);
+
+  const refreshedPermission = await collectSse(
+    port,
+    `/api/episodes/${slug}/steps/voiceover/stream`,
+    { stopOnPermission: true },
+  );
+  check(
+    "refresh mempertahankan izin pending",
+    refreshedPermission.events.some(
+      (event) =>
+        event.event === "permission" &&
+        event.data?.permission?.id === permissionId &&
+        event.data?.permission?.status === "pending",
+    ),
+  );
+
+  const lastPermissionEvent = refreshedPermission.events.at(-1);
+  const approve = await request(port, {
+    method: "POST",
+    requestPath: `/api/permissions/${permissionId}`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({ decision: "approve" }),
+  });
+  check("keputusan manual disetujui", approve.status === 200);
+
+  const afterApproval = await collectSse(
+    port,
+    `/api/episodes/${slug}/steps/voiceover/stream`,
+    { lastEventId: lastPermissionEvent?.id },
+  );
+  check(
+    "persetujuan manual menjalankan tindakan satu kali",
+    afterApproval.events.some(
+      (event) =>
+        event.event === "status" && event.data?.status === "completed",
+    ) && fs.existsSync(manualOutput),
+  );
+  check(
+    "file manual ditulis setelah persetujuan",
+    fs
+      .readFileSync(manualOutput, "utf8")
+      .startsWith("approved:mock-session-"),
+  );
+  check(
+    "keputusan manual tercatat",
+    readPermissionDecisions().includes("approved"),
+  );
+
+  await request(port, {
+    method: "POST",
+    requestPath: `/api/episodes/${slug}/steps/scenes/permissions/auto`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({ enabled: true }),
+  });
+
+  const autoRun = await request(port, {
+    method: "POST",
+    requestPath: `/api/episodes/${slug}/steps/scenes/run`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({
+      agentId: "mock-permission-auto",
+      prompt: "Tulis otomatis",
+    }),
+  });
+  check("sesi auto-izin dimulai", autoRun.status === 201);
+
+
+  const autoToggle = await request(port, {
+    method: "POST",
+    requestPath: `/api/episodes/${slug}/steps/scenes/permissions/auto`,
+    headers: { Origin: origin, "x-workflow-token": token },
+    body: JSON.stringify({ enabled: true }),
+  });
+  check(
+    "mode otomatis dinyalakan eksplisit",
+    autoToggle.status === 200 && JSON.parse(autoToggle.body).enabled === true,
+  );
+
+  const autoStream = await collectSse(
+    port,
+    `/api/episodes/${slug}/steps/scenes/stream`,
+  );
+  const autoPermission = autoStream.events.find(
+    (event) =>
+      event.event === "permission" &&
+      event.data?.permission?.status === "approved" &&
+      event.data?.permission?.decisionSource === "auto",
+  );
+
+  check("auto-izin tercatat di stream", Boolean(autoPermission));
+  check(
+    "mode otomatis menjalankan tindakan",
+    autoStream.events.some(
+      (event) =>
+        event.event === "status" && event.data?.status === "completed",
+    ) &&
+      fs.existsSync(
+        path.join(
+          workspaceDir,
+          "episodes",
+          slug,
+          "auto-output.txt",
+        ),
+      ),
+  );
+  check(
+    "mode otomatis tercatat sebagai approved_auto",
+    readPermissionDecisions().includes("approved_auto"),
   );
 
   const invalidKind = await request(port, {

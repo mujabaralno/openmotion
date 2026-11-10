@@ -4,7 +4,7 @@ import type { AcpUpdate } from "../acp/types.ts";
 import type { StepKind } from "../db/index.ts";
 import { resolveWorkspacePath } from "../workspace/paths.ts";
 import { AgentStreamError } from "./errors.ts";
-import type { AgentStreamEvent } from "./types.ts";
+import type { AgentStreamEvent, PermissionRecord } from "./types.ts";
 
 export type StepHistory = {
   attemptId: string | null;
@@ -39,6 +39,27 @@ function parseEvent(value: unknown): AgentStreamEvent | null {
       attemptId: value.attemptId,
       type: "update",
       update: value.update as AcpUpdate,
+      at: value.at,
+    };
+  }
+  if (value.type === "permission") {
+    if (!isRecord(value.permission)) return null;
+    if (typeof value.permission.id !== "string") return null;
+    return {
+      seq: value.seq,
+      attemptId: value.attemptId,
+      type: "permission",
+      permission: value.permission as PermissionRecord,
+      at: value.at,
+    };
+  }
+  if (value.type === "permission-mode") {
+    if (typeof value.enabled !== "boolean") return null;
+    return {
+      seq: value.seq,
+      attemptId: value.attemptId,
+      type: "permission-mode",
+      enabled: value.enabled,
       at: value.at,
     };
   }

@@ -111,6 +111,23 @@ export function episodeSlugExists(
   );
 }
 
+export function getStepIdByKind(
+  episodeSlug: string,
+  kind: StepKind,
+  db: Database.Database = getDb(),
+): number | null {
+  const row = db
+    .prepare(
+      `SELECT steps.id AS id
+       FROM steps
+       JOIN episodes ON episodes.id = steps.episode_id
+       WHERE episodes.slug = ? AND steps.kind = ?`,
+    )
+    .get(episodeSlug, kind) as { id: number } | undefined;
+
+  return row ? Number(row.id) : null;
+}
+
 export function insertEpisodeWithSteps(
   record: NewEpisodeRecord,
   db: Database.Database = getDb(),

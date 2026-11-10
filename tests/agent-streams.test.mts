@@ -3,14 +3,23 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import type Database from "better-sqlite3";
 import {
+  decidePermission,
   getStepStreamInfo,
   resetAgentStreamsForTests,
+  setAutoApprovePermissions,
   startStepStream,
   subscribeStepStream,
 } from "../src/server/agent-streams/manager.ts";
-import type { AgentStreamEvent } from "../src/server/agent-streams/types.ts";
-import { AgentStreamError } from "../src/server/agent-streams/errors.ts";
+import type {
+  AgentStreamEvent,
+  PermissionRecord,
+} from "../src/server/agent-streams/types.ts";
+import {
+  AgentStreamError,
+  PermissionError,
+} from "../src/server/agent-streams/errors.ts";
 import {
   getStepLogPath,
   readLatestAttempt,
@@ -20,7 +29,11 @@ import {
   resetAgentRegistryForTests,
   stopAllAgentSessions,
 } from "../src/server/agents/registry.ts";
-import type { StepKind } from "../src/server/db/index.ts";
+import {
+  createDatabase,
+  STEP_KINDS,
+  type StepKind,
+} from "../src/server/db/index.ts";
 
 const mockPath = path.join(
   process.cwd(),
@@ -86,7 +99,7 @@ function createWorkspace(): Workspace {
           id: "mock-permission",
           name: "Mock Permission",
           command: process.execPath,
-          args: mock("permission", 20),
+          args: mock("permission", 100),
         },
       ],
     }),
@@ -194,6 +207,85 @@ async function waitForSessionStopped(attemptId: string): Promise<void> {
   }
 
   throw new Error(`Sesi ${attemptId} belum berhenti.`);
+}
+
+function createPermissionDatabase(workspace: Workspace): {
+  db: Database.Database;
+  stepIds: Record<StepKind, number>;
+} {
+  const db = createDatabase(
+    path.join(workspace.root, "data", "app.db"),
+  );
+  const episode = db
+    .prepare(
+      "INSERT INTO episodes (slug, title, topic) VALUES (?, ?, ?)",
+    )
+    .run(workspace.episodeSlug, "Episode Uji", "");
+  const stepIds = {} as Record<StepKind, number>;
+
+  for (const kind of STEP_KINDS) {
+    const result = db
+      .prepare("INSERT INTO steps (episode_id, kind) VALUES (?, ?)")
+      .run(episode.lastInsertRowid, kind);
+    stepIds[kind] = Number(result.lastInsertRowid);
+  }
+
+  return { db, stepIds };
+}
+
+function openCollector(
+  workspace: Workspace,
+  kind: StepKind,
+  episodeSlug = workspace.episodeSlug,
+) {
+  const events: AgentStreamEvent[] = [];
+  const subscription = subscribeStepStream({
+    episodeSlug,
+    kind,
+    workspaceRoot: workspace.workspaceRoot,
+    onEvent: (event) => events.push(event),
+  });
+  events.push(...subscription.replay);
+
+  return {
+    events,
+    subscription,
+    close() {
+      subscription.unsubscribe();
+    },
+    async waitFor(
+      predicate: (event: AgentStreamEvent) => boolean,
+      label: string,
+      timeoutMs = 10000,
+    ): Promise<AgentStreamEvent> {
+      const deadline = Date.now() + timeoutMs;
+
+      while (Date.now() < deadline) {
+        const event = events.find(predicate);
+        if (event) return event;
+        await delay(20);
+      }
+
+      throw new Error(`Timeout menunggu ${label}.`);
+    },
+  };
+}
+
+function latestPermission(
+  events: AgentStreamEvent[],
+  permissionId: string,
+): PermissionRecord | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (
+      event.type === "permission" &&
+      event.permission.id === permissionId
+    ) {
+      return event.permission;
+    }
+  }
+
+  return null;
 }
 
 test("streaming menghubungkan prompt, update bertahap, dan status selesai", async () => {
@@ -449,36 +541,592 @@ test("langkah dan episode berbeda menyimpan stream terpisah", async () => {
   });
 });
 
-test("permintaan izin tidak disetujui otomatis saat streaming", async () => {
+test("izin manual menunggu, disetujui sekali, dan tercatat", async () => {
   await withWorkspace(async (workspace) => {
-    await startStepStream({
-      episodeSlug: workspace.episodeSlug,
-      kind: "script",
-      agentId: "mock-permission",
-      prompt: "Tulis berkas uji",
-      workspaceRoot: workspace.workspaceRoot,
-    });
-    const events = await collectStepStream(workspace, "script");
+    const { db, stepIds } = createPermissionDatabase(workspace);
 
-    assert.equal(
-      fs.existsSync(path.join(workspace.episodeDir, "mock-output.txt")),
-      false,
-    );
-    assert.equal(
-      events.some(
+    try {
+      const attempt = await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const collector = openCollector(workspace, "script");
+
+      try {
+        const pendingEvent = await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.status === "pending",
+          "izin pending",
+        );
+
+        assert.equal(pendingEvent.type, "permission");
+        if (pendingEvent.type !== "permission") {
+          assert.fail("Event izin tidak valid.");
+        }
+
+        const permission = pendingEvent.permission;
+        assert.equal(
+          fs.existsSync(
+            path.join(workspace.episodeDir, "mock-output.txt"),
+          ),
+          false,
+        );
+
+        const decided = await decidePermission(
+          permission.id,
+          "approve",
+        );
+
+        assert.equal(decided.status, "approved");
+        assert.equal(decided.decisionSource, "manual");
+        assert.equal(decided.attemptId, attempt.attemptId);
+
+        await collector.waitFor(
+          (event) =>
+            event.type === "status" && event.status === "completed",
+          "status selesai",
+        );
+
+        const content = fs.readFileSync(
+          path.join(workspace.episodeDir, "mock-output.txt"),
+          "utf8",
+        );
+
+        assert.match(content, /^approved:mock-session-/);
+        assert.match(content, /Tulis berkas uji/);
+
+        const log = db
+          .prepare(
+            "SELECT step_id, request_summary, decision FROM permission_log",
+          )
+          .get() as {
+          step_id: number;
+          request_summary: string;
+          decision: string;
+        };
+
+        assert.equal(log.step_id, stepIds.script);
+        assert.equal(log.decision, "approved");
+        assert.match(log.request_summary, /Menulis file contoh/);
+        assert.equal(
+          (
+            db
+              .prepare(
+                "SELECT COUNT(*) AS count FROM permission_log",
+              )
+              .get() as { count: number }
+          ).count,
+          1,
+        );
+
+        await assert.rejects(
+          () => decidePermission(permission.id, "reject"),
+          (error) =>
+            error instanceof PermissionError &&
+            (error.code === "not-found" || error.code === "not-pending"),
+        );
+      } finally {
+        collector.close();
+      }
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("penolakan manual tidak menulis file", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const collector = openCollector(workspace, "script");
+
+      try {
+        const pendingEvent = await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.status === "pending",
+          "izin pending",
+        );
+
+        if (pendingEvent.type !== "permission") {
+          assert.fail("Event izin tidak valid.");
+        }
+
+        await decidePermission(pendingEvent.permission.id, "reject");
+        await collector.waitFor(
+          (event) =>
+            event.type === "status" && event.status === "completed",
+          "status selesai",
+        );
+
+        assert.equal(
+          fs.existsSync(
+            path.join(workspace.episodeDir, "mock-output.txt"),
+          ),
+          false,
+        );
+        assert.equal(
+          (
+            db
+              .prepare(
+                "SELECT decision FROM permission_log",
+              )
+              .get() as { decision: string }
+          ).decision,
+          "rejected",
+        );
+      } finally {
+        collector.close();
+      }
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("mode otomatis menyetujui permintaan berikutnya dan mencatat approved_auto", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      setAutoApprovePermissions(
+        workspace.episodeSlug,
+        "script",
+        true,
+      );
+      const collector = openCollector(workspace, "script");
+
+      try {
+        const approvedEvent = await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.status === "approved",
+          "izin auto-approved",
+        );
+
+        if (approvedEvent.type !== "permission") {
+          assert.fail("Event izin tidak valid.");
+        }
+
+        assert.equal(approvedEvent.permission.auto, true);
+        assert.equal(
+          approvedEvent.permission.decisionSource,
+          "auto",
+        );
+
+        await collector.waitFor(
+          (event) =>
+            event.type === "status" && event.status === "completed",
+          "status selesai",
+        );
+
+        assert.equal(
+          fs.existsSync(
+            path.join(workspace.episodeDir, "mock-output.txt"),
+          ),
+          true,
+        );
+        assert.equal(
+          (
+            db
+              .prepare(
+                "SELECT decision FROM permission_log",
+              )
+              .get() as { decision: string }
+          ).decision,
+          "approved_auto",
+        );
+        assert.equal(
+          collector.events.some(
+            (event) =>
+              event.type === "permission-mode" && event.enabled,
+          ),
+          true,
+        );
+      } finally {
+        collector.close();
+      }
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("permintaan yang sudah menunggu tetap manual saat mode otomatis dinyalakan", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const collector = openCollector(workspace, "script");
+
+      try {
+        const pendingEvent = await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.status === "pending",
+          "izin pending",
+        );
+
+        if (pendingEvent.type !== "permission") {
+          assert.fail("Event izin tidak valid.");
+        }
+
+        const permissionId = pendingEvent.permission.id;
+        setAutoApprovePermissions(
+          workspace.episodeSlug,
+          "script",
+          true,
+        );
+        await delay(300);
+
+        assert.equal(
+          latestPermission(collector.events, permissionId)?.status,
+          "pending",
+        );
+        assert.equal(
+          fs.existsSync(
+            path.join(workspace.episodeDir, "mock-output.txt"),
+          ),
+          false,
+        );
+
+        await decidePermission(permissionId, "reject");
+        await collector.waitFor(
+          (event) =>
+            event.type === "status" && event.status === "completed",
+          "status selesai",
+        );
+        assert.equal(
+          (
+            db
+              .prepare(
+                "SELECT decision FROM permission_log",
+              )
+              .get() as { decision: string }
+          ).decision,
+          "rejected",
+        );
+      } finally {
+        collector.close();
+      }
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("keputusan tidak valid, ganda, dan kegagalan log tidak menyetujui tindakan", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const collector = openCollector(workspace, "script");
+
+      try {
+        const pendingEvent = await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.status === "pending",
+          "izin pending",
+        );
+
+        if (pendingEvent.type !== "permission") {
+          assert.fail("Event izin tidak valid.");
+        }
+
+        const permissionId = pendingEvent.permission.id;
+
+        await assert.rejects(
+          () => decidePermission("tidak-ada", "approve"),
+          (error) =>
+            error instanceof PermissionError &&
+            error.code === "not-found",
+        );
+        await assert.rejects(
+          () => decidePermission(permissionId, "maybe" as "approve"),
+          (error) =>
+            error instanceof PermissionError &&
+            error.code === "invalid-decision",
+        );
+
+        db.close();
+        await assert.rejects(
+          () => decidePermission(permissionId, "approve"),
+          (error) =>
+            error instanceof PermissionError &&
+            error.code === "log-failed",
+        );
+
+        await collector.waitFor(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.id === permissionId &&
+            event.permission.status === "failed",
+          "izin gagal dicatat",
+        );
+        assert.equal(
+          fs.existsSync(
+            path.join(workspace.episodeDir, "mock-output.txt"),
+          ),
+          false,
+        );
+      } finally {
+        collector.close();
+      }
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("mode otomatis tidak terbawa ke eksekusi baru atau langkah lain", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis otomatis",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      setAutoApprovePermissions(
+        workspace.episodeSlug,
+        "script",
+        true,
+      );
+      const autoCollector = openCollector(workspace, "script");
+      await autoCollector.waitFor(
         (event) =>
-          event.type === "update" &&
-          event.update.sessionUpdate === "tool_call_update" &&
-          event.update.status === "failed",
-      ),
-      true,
-    );
-    assert.equal(
-      events.some(
-        (event) => event.type === "status" && event.status === "completed",
-      ),
-      true,
-    );
+          event.type === "permission" &&
+          event.permission.status === "approved",
+        "izin auto",
+      );
+      await autoCollector.waitFor(
+        (event) =>
+          event.type === "status" && event.status === "completed",
+        "auto selesai",
+      );
+      autoCollector.close();
+
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis manual baru",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const newExecution = openCollector(workspace, "script");
+      const newPending = await newExecution.waitFor(
+        (event) =>
+          event.type === "permission" &&
+          event.permission.status === "pending",
+        "izin manual eksekusi baru",
+      );
+
+      if (newPending.type !== "permission") {
+        assert.fail("Event izin tidak valid.");
+      }
+
+      assert.equal(newPending.permission.auto, false);
+      await decidePermission(newPending.permission.id, "reject");
+      await newExecution.waitFor(
+        (event) =>
+          event.type === "status" && event.status === "completed",
+        "eksekusi baru selesai",
+      );
+      newExecution.close();
+
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "tags",
+        agentId: "mock-permission",
+        prompt: "Tulis langkah lain",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.tags,
+        db,
+      });
+      const otherStep = openCollector(workspace, "tags");
+      const otherPending = await otherStep.waitFor(
+        (event) =>
+          event.type === "permission" &&
+          event.permission.status === "pending",
+        "izin langkah lain",
+      );
+
+      if (otherPending.type !== "permission") {
+        assert.fail("Event izin tidak valid.");
+      }
+
+      assert.equal(otherPending.permission.auto, false);
+      await decidePermission(otherPending.permission.id, "reject");
+      await otherStep.waitFor(
+        (event) =>
+          event.type === "status" && event.status === "completed",
+        "langkah lain selesai",
+      );
+      otherStep.close();
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
+  });
+});
+
+test("izin pending dari sesi yang berakhir tidak dapat disetujui setelah refresh", async () => {
+  await withWorkspace(async (workspace) => {
+    const { db, stepIds } = createPermissionDatabase(workspace);
+
+    try {
+      await startStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        agentId: "mock-permission",
+        prompt: "Tulis berkas uji",
+        workspaceRoot: workspace.workspaceRoot,
+        stepId: stepIds.script,
+        db,
+      });
+      const collector = openCollector(workspace, "script");
+      const pendingEvent = await collector.waitFor(
+        (event) =>
+          event.type === "permission" &&
+          event.permission.status === "pending",
+        "izin pending",
+      );
+
+      if (pendingEvent.type !== "permission") {
+        assert.fail("Event izin tidak valid.");
+      }
+
+      const permissionId = pendingEvent.permission.id;
+      collector.close();
+      await resetAgentStreamsForTests();
+
+      await assert.rejects(
+        () => decidePermission(permissionId, "approve"),
+        (error) =>
+          error instanceof PermissionError &&
+          error.code === "not-found",
+      );
+
+      const replay: AgentStreamEvent[] = [];
+      const subscription = subscribeStepStream({
+        episodeSlug: workspace.episodeSlug,
+        kind: "script",
+        workspaceRoot: workspace.workspaceRoot,
+        onEvent: (event) => replay.push(event),
+      });
+      replay.push(...subscription.replay);
+      subscription.unsubscribe();
+
+      assert.equal(
+        replay.some(
+          (event) =>
+            event.type === "permission" &&
+            event.permission.id === permissionId &&
+            event.permission.status === "expired",
+        ),
+        true,
+      );
+      assert.equal(
+        replay.some(
+          (event) =>
+            event.type === "status" && event.status === "failed",
+        ),
+        true,
+      );
+      assert.equal(
+        fs.existsSync(
+          path.join(workspace.episodeDir, "mock-output.txt"),
+        ),
+        false,
+      );
+    } finally {
+      await resetAgentStreamsForTests();
+      try {
+        db.close();
+      } catch {
+        // Database sudah ditutup.
+      }
+    }
   });
 });
 

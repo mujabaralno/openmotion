@@ -86,6 +86,14 @@ Halaman detail episode memiliki panel chat agen dengan SSE. Teks, aktivitas tool
 
 Panel memakai komponen shadcn/ui dan pola AI Elements (`MessageScroller`, `Message`, `Bubble`, `Marker`, `Trace`). Detail rute, format event, reconnect, dan pengujian ada di [`docs/streaming.md`](docs/streaming.md).
 
+## Izin agen
+
+Setiap permintaan izin ACP masuk ke antrean server dan menunggu keputusan pengguna. Panel chat menampilkan kartu izin dengan tindakan yang diminta, tombol Setujui/Tolak, dan status keputusan.
+
+Setiap keputusan dicatat di `permission_log` dengan `step_id`, ringkasan permintaan, keputusan (`approved`, `rejected`, `approved_auto`, `rejected_auto`), dan waktu. Kegagalan mencatat tidak pernah menjadi persetujuan.
+
+Mode izin otomatis harus dinyalakan eksplisit per sesi/langkah, tidak berlaku untuk izin yang sudah pending, dan reset untuk eksekusi baru. Detail aturan, rute, dan pengujian ada di [`docs/permissions.md`](docs/permissions.md).
+
 ## Styling
 
 Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` mengimpor Tailwind dan tema shadcn/ui; seluruh tampilan memakai utility Tailwind. Komponen shadcn/ui dipakai untuk panel chat dan kontrolnya.
