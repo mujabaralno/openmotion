@@ -13,7 +13,7 @@ Aplikasi web lokal untuk mengelola produksi video: naskah, voice-over, scene, da
 git clone <url-repo> workflow-studio
 cd workflow-studio
 npm install
-cp .env.local.example .env.local   # opsional, isi bila perlu
+cp .env.local.example .env.local   # isi WORKSPACE_DIR dengan path absolut
 npm run dev
 ```
 
@@ -45,6 +45,20 @@ npm test
 
 Skema lengkap, aturan migrasi, dan cara menambah migrasi berikutnya ada di [`docs/database.md`](docs/database.md).
 
+## Workspace
+
+`WORKSPACE_DIR` menunjuk folder data produksi, terpisah dari kode aplikasi. Saat server start, aplikasi membuat struktur awal bila belum ada:
+
+```text
+<WORKSPACE_DIR>/
+├── episodes/
+├── prompts/
+├── guide/
+└── agents.json
+```
+
+Inisialisasi tidak menimpa file atau episode yang sudah ada. Jika konfigurasi kosong atau lokasi tidak bisa dipakai, log menampilkan penyebab dan cara memperbaikinya. Detail, contoh `agents.json`, dan daftar kesalahan ada di [`docs/workspace.md`](docs/workspace.md).
+
 ## Remotion
 
 Contoh komposisi ada di folder `remotion/` dengan paket terpisah.
@@ -64,7 +78,7 @@ src/app/api/          route handler API
 src/proxy.ts          guard keamanan untuk seluruh /api/*
 src/server/db/        koneksi, skema, dan migrasi SQLite
 src/server/security/  aturan Host/Origin dan token
-src/server/workspace/ penjaga path dan whitelist file workspace
+src/server/workspace/ penjaga path, whitelist, dan inisialisasi workspace
 tests/                tes unit
 docs/                 catatan arsitektur dan keamanan
 remotion/             proyek Remotion contoh
