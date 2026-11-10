@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="public/openmotion-horizontal-dark.svg" alt="OpenMotion" width="360" />
+</p>
+
 # OpenMotion
 
 Dashboard produksi Shorts lokal: topik → paket episode parallax → narasi bertag → voice-over ElevenLabs → rakit scene → render dan review. Setiap hasil ditinjau dan disetujui pengguna sebelum tahap berikutnya dibuka.
