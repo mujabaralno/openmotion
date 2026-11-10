@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 export type WorkspaceArea =
+  | "research"
   | "root"
   | "prompts"
   | "guide"
@@ -18,6 +19,7 @@ export const WORKSPACE_FILE_WHITELIST: Record<
   readonly string[]
 > = {
   root: ["agents.json"],
+  research: ["AGENTS.md"],
   prompts: ["script.md", "tags.md", "scenes.md", "thumbnail.md", "publish.md"],
   guide: ["style-parallax.md"],
   episode: [
@@ -53,6 +55,7 @@ const AREA_DIRECTORIES: Record<
   { directory: string; scopedToEpisode: boolean; episodeBase?: string }
 > = {
   root: { directory: "", scopedToEpisode: false },
+  research: { directory: "research", scopedToEpisode: false },
   prompts: { directory: "prompts", scopedToEpisode: false },
   guide: { directory: "guide", scopedToEpisode: false },
   episode: { directory: "", scopedToEpisode: true },

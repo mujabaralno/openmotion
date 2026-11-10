@@ -45,7 +45,8 @@ export type AcpSessionOptions = {
   agentId: string;
   episodeSlug: string;
   workspaceRoot?: string;
-  workingDirectory?: 'episode' | 'remotion';
+  workingDirectory?: 'episode' | 'remotion' | 'research';
+  readOnly?: boolean;
   clientInfo?: {
     name: string;
     title?: string;
@@ -409,7 +410,7 @@ export class AcpSession {
       // Prefer an explicit manual-permission mode when the agent advertises one.
       const modes = isRecord(sessionResult.modes) ? sessionResult.modes : null;
       const available = modes && Array.isArray(modes.availableModes) ? modes.availableModes : [];
-      const manualMode = ['default', 'workspace-write'].find(id => available.some((mode: unknown) => isRecord(mode) && mode.id === id));
+      const manualMode = (this.options.readOnly ? ['read-only', 'plan', 'default'] : ['default', 'workspace-write']).find(id => available.some((mode: unknown) => isRecord(mode) && mode.id === id));
       if (manualMode) {
         await this.connection.request("session/set_mode", { sessionId: this.acpSessionId, modeId: manualMode }, { timeoutMs: initializeTimeoutMs });
       }

@@ -70,7 +70,7 @@ try {
   check('topic-only episode creation', created.status === 201);
   const { episode } = await created.json();
   const endpoint = `/api/episodes/${episode.slug}`;
-  for (const url of ['/episodes', '/settings', `/episodes/${episode.slug}`]) {
+  for (const url of ['/episodes', '/settings', '/research', `/episodes/${episode.slug}`]) {
     const response = await request(url);
     const html = await response.text();
     check(`page ${url} renders`, response.ok && html.includes('OpenMotion') && !html.includes('NEXT_HTTP_ERROR_FALLBACK;500'));
@@ -140,6 +140,22 @@ try {
   check('seven production stages are exposed in order', sevenSteps.steps.map(step => step.kind).join(',') === 'script,tags,voiceover,scenes,render,thumbnail,publish');
   check('publication model choices use the agent catalog', (await request(`${endpoint}/steps/publish/options`, 'POST', { agentId: 'pipeline-test' })).ok);
   check('thumbnail model choices use the agent catalog', (await request(`${endpoint}/steps/thumbnail/options`, 'POST', { agentId: 'pipeline-test' })).ok);
+  const researchStatus = await (await request('/api/research')).json();
+  check('research metadata is readable without OAuth secrets', researchStatus.youtube.connected === false && !JSON.stringify(researchStatus).includes('client_secret'));
+  check('YouTube connect explains missing configuration', (await request('/api/research/youtube/connect', 'POST', {})).status === 400);
+  check('YouTube sync requires an account', (await request('/api/research/youtube/sync', 'POST', {})).status === 400);
+  const invalidOAuth = await fetch(`${base}/integrations/youtube/callback?state=bad&code=bad`, { redirect: 'manual' });
+  check('OAuth callback rejects invalid browser state', invalidOAuth.status === 307 && invalidOAuth.headers.get('location').includes('youtube=error'));
+  agents.agents.push({ id: 'research-test', name: 'Research fixture', command: process.execPath, args: [path.join(root, 'tests/fixtures/research-acp-agent.mjs')] });
+  check('research agent can be configured', (await request('/api/settings', 'PUT', { file: 'agents.json', content: JSON.stringify(agents) })).ok);
+  const research = await (await request('/api/research/threads', 'POST', {})).json();
+  check('research conversation created', Boolean(research.thread?.id));
+  const researchPath = `/api/research/threads/${research.thread.id}`;
+  check('research prompt accepted', (await request(`${researchPath}/messages`, 'POST', { content: 'Cari ide habitat orangutan', agentId: 'research-test' })).status === 202);
+  await waitFor(async () => { const view = await (await request(researchPath)).json(); if (view.messages.at(-1)?.status === 'failed') throw new Error(view.messages.at(-1).error); return !view.running && view.messages.at(-1)?.status === 'completed'; });
+  const researchReply = await (await request(researchPath)).json();
+  check('research reply persists and includes generated text', researchReply.messages.length === 2 && researchReply.messages[1].content.includes('orangutan'));
+  check('research does not create a production episode', (await (await request('/api/episodes')).json()).episodes.length === 1);
   check('missing episode returns 404', (await request('/api/episodes/not-found/pipeline')).status === 404);
   await stop();
   server = start(['start', '-H', '127.0.0.1', '-p', String(port)]);
@@ -149,6 +165,8 @@ try {
   check('model and effort survive restart', persisted.steps[0].modelId === 'fast' && persisted.steps[0].effort === 'low');
   const persistedReplay = await (await request(`${endpoint}/steps/script/stream`)).text();
   check('SSE log replays after server restart', persistedReplay.includes('local episode.') && persistedReplay.includes('completed'));
+  const researchAfterRestart = await (await request(researchPath)).json();
+  check('research history survives server restart', researchAfterRestart.messages[1].content === researchReply.messages[1].content && !researchAfterRestart.running);
   console.log(`${passed} production/HTTP/SSE checks passed.`);
   if (process.argv.includes('--keep')) {
     fs.writeFileSync('/tmp/openmotion-dashboard-qa.json', JSON.stringify({ url: base, project, workspace, slug: episode.slug }));

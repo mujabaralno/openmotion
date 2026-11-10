@@ -145,6 +145,33 @@ const MIGRATIONS: readonly Migration[] = [
       for (const kind of ['thumbnail', 'publish']) insert.run(kind, kind);
     },
   },
+  {
+    version: 5,
+    name: 'research-chat-and-youtube-analytics',
+    up(db) {
+      db.exec(`
+        CREATE TABLE research_threads (id TEXT PRIMARY KEY, title TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL);
+        CREATE TABLE research_messages (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          thread_id TEXT NOT NULL REFERENCES research_threads(id) ON DELETE CASCADE,
+          role TEXT NOT NULL CHECK(role IN ('user','assistant')),
+          content TEXT NOT NULL DEFAULT '',
+          status TEXT NOT NULL CHECK(status IN ('running','completed','failed','cancelled')),
+          sources TEXT NOT NULL DEFAULT '[]', error TEXT, agent_id TEXT, model_id TEXT, effort TEXT,
+          created_at TEXT NOT NULL
+        );
+        CREATE INDEX idx_research_messages_thread ON research_messages(thread_id, id);
+        CREATE VIRTUAL TABLE research_knowledge USING fts5(source_id UNINDEXED, title, content, href UNINDEXED, kind UNINDEXED, tokenize='unicode61');
+        CREATE TABLE youtube_connection (id INTEGER PRIMARY KEY CHECK(id=1), credentials TEXT NOT NULL, channel_id TEXT, channel_title TEXT, synced_at TEXT, period_start TEXT, period_end TEXT);
+        CREATE TABLE youtube_oauth (state_hash TEXT PRIMARY KEY, verifier TEXT NOT NULL, redirect_uri TEXT NOT NULL, expires_at INTEGER NOT NULL);
+        CREATE TABLE youtube_videos (
+          id TEXT PRIMARY KEY, title TEXT NOT NULL, description TEXT NOT NULL, published_at TEXT NOT NULL,
+          views REAL NOT NULL, watch_minutes REAL NOT NULL, average_percentage REAL NOT NULL,
+          likes REAL NOT NULL, comments REAL NOT NULL, subscribers_gained REAL NOT NULL
+        );
+      `);
+    },
+  },
 ];
 
 function createMigrationsTable(db: Database.Database): void {

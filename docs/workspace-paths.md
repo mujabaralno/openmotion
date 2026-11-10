@@ -7,6 +7,7 @@
 | Area | Folder | File yang diizinkan |
 |------|--------|---------------------|
 | `root` | workspace | `agents.json` |
+| `research` | `research/` | `AGENTS.md` |
 | `prompts` | `prompts/` | `script.md`, `tags.md`, `scenes.md`, `thumbnail.md`, `publish.md` |
 | `guide` | `guide/` | `style-parallax.md` |
 | `episode` | `episodes/<slug>/` | `episode.json`, `01-naskah.md`, `02-naskah-tagged.md`, `03-voiceover.mp3`, `03-voiceover.timestamps.json`, `05-thumbnail.svg`, `06-publish.md` |

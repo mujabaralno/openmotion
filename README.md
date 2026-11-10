@@ -27,6 +27,12 @@ Di **Pengaturan**:
 - Timestamp aktif secara default. Jika model tidak mendukung endpoint tersebut, nonaktifkan; caption pengganti menggunakan timing perkiraan berdasarkan audio.
 - Sesuaikan nama seri, bahasa, template, dan panduan visual bila diperlukan.
 
+## Riset topik
+
+Buka **Riset topik** untuk berdiskusi dengan agen memakai RAG lokal dari naskah dan paket episode yang telah disetujui. Jawaban menyertakan sumber yang dapat diperiksa; ide terpilih dapat dibawa ke form pembuatan episode.
+
+Opsional, hubungkan channel YouTube dengan izin baca untuk menyinkronkan statistik video 90 hari terakhir sebagai konteks riset. Isi kredensial OAuth di environment dan ikuti [panduan Riset dan YouTube](docs/research.md). Riset arsip tetap bisa dipakai tanpa koneksi YouTube. Integrasi ini tidak memublikasikan video.
+
 ## Produksi episode
 
 1. **Buat episode:** cukup isi topik; judul boleh dikosongkan untuk mengikuti topik.

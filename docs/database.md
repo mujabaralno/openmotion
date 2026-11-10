@@ -79,3 +79,5 @@ sqlite3 data/app.db "SELECT * FROM schema_migrations;"
 Jangan menyalin isi database ke issue, log, atau dokumen publik.
 
 Migrasi 4 (`thumbnail-and-publish-steps`) memperbarui trigger kind/status dan menambahkan baris idle `thumbnail` serta `publish` ke episode yang sudah ada jika belum tersedia. ID langkah, persetujuan sebelumnya, permission_log, dan render_jobs dipertahankan.
+
+Migrasi 5 (`research-chat-and-youtube-analytics`) menambahkan `research_threads`, `research_messages`, indeks virtual FTS5 `research_knowledge`, `youtube_connection`, `youtube_oauth`, dan `youtube_videos`. Riwayat chat menyimpan snapshot sumber per jawaban; koneksi YouTube menyimpan token terenkripsi dan metadata periode sinkronisasi. Database tahap produksi dan permission history tetap dipertahankan.

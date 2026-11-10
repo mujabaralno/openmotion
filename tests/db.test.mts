@@ -15,6 +15,7 @@ const EXPECTED_MIGRATIONS = [
   { version: 2, name: "pipeline-revision-notes" },
   { version: 3, name: "step-model-and-effort" },
   { version: 4, name: "thumbnail-and-publish-steps" },
+  { version: 5, name: "research-chat-and-youtube-analytics" },
 ];
 
 const LEGACY_SCHEMA = `
@@ -113,7 +114,9 @@ test("membuat database, tabel, indeks, trigger, dan migrasi otomatis", () => {
         "render_jobs",
         "schema_migrations",
         "steps",
-      ]);
+        "research_threads", "research_messages", "research_knowledge", "research_knowledge_data", "research_knowledge_idx", "research_knowledge_content", "research_knowledge_docsize", "research_knowledge_config",
+        "youtube_connection", "youtube_oauth", "youtube_videos",
+      ].sort());
 
       assert.deepEqual(tableColumns(db, "episodes"), [
         "id",

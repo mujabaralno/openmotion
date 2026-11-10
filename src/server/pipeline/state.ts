@@ -43,5 +43,6 @@ export function recoverInterruptedSteps(): void {
   if (state.__openMotionRecovered) return;
   state.__openMotionRecovered = true;
   getDb().prepare(`UPDATE steps SET status = 'failed', error = 'Server berhenti saat pekerjaan berjalan. Jalankan ulang langkah ini.', finished_at = ? WHERE status = 'running'`).run(new Date().toISOString());
+  getDb().prepare(`UPDATE research_messages SET status = 'failed', error = 'Riset terputus karena server restart. Kirim pesan lagi untuk melanjutkan.' WHERE status = 'running'`).run();
   getDb().prepare(`UPDATE render_jobs SET status = 'failed', error = 'Render terputus karena server restart.', finished_at = ? WHERE status IN ('running','queued')`).run(new Date().toISOString());
 }
