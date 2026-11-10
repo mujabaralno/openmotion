@@ -73,6 +73,12 @@ API tersedia di `GET/POST /api/episodes` dan `GET /api/episodes/<slug>`. Detail 
 
 Format konfigurasi, API registry, status proses, dan cara verifikasi cleanup ada di [`docs/agents-registry.md`](docs/agents-registry.md). Protokol ACP, chat, dan izin menyusul di issue berikutnya.
 
+## ACP client
+
+Klien ACP menghubungkan registry ke proses agen lewat stdio: `initialize`, `session/new` pada folder episode, `session/prompt`, update bertahap, dan permintaan izin. Secara default izin tidak disetujui otomatis; handler izin disiapkan untuk M1-5.
+
+Detail API, timeout, penanganan error, dan hasil uji manual dengan CommandCode ada di [`docs/acp-client.md`](docs/acp-client.md).
+
 ## Styling
 
 Proyek memakai Tailwind CSS v4 melalui plugin PostCSS resmi (`postcss.config.mjs`). `src/app/globals.css` hanya mengimpor Tailwind; seluruh tampilan UI memakai utility class Tailwind. Nanti bisa dilengkapi komponen shadcn/ui.

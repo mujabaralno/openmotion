@@ -76,6 +76,7 @@ Perilaku:
 - Sesi yang sama tidak boleh dipakai untuk agen atau episode berbeda; registry mengembalikan error konflik.
 - Folder kerja proses adalah `episodes/<slug>/`, divalidasi dengan penjaga path M0-3 dan harus berupa folder.
 - Proses dijalankan tanpa shell, dengan `detached: true`, sehingga proses beserta turunannya berada dalam satu process group di macOS/Linux.
+- Untuk klien ACP, registry dapat memakai `stdio: "pipe"` dan prosesnya diambil lewat `getAgentProcess(sessionId)`. Detailnya ada di [`acp-client.md`](acp-client.md).
 - `stopAgentSession` mengirim `SIGTERM` ke process group; `{ force: true }` mengirim `SIGKILL`.
 - `stopAllAgentSessions` hanya menghentikan proses yang tercatat di registry. Proses lain di komputer tidak disentuh.
 - Registry disimpan di `globalThis` dengan kunci `__workflowStudioAgentRegistry`, sehingga pemuatan ulang modul saat pengembangan tidak menghilangkan pelacakan. Handler shutdown juga hanya dipasang sekali.
