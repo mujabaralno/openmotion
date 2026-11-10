@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="public/openmotion-horizontal-dark.svg" alt="OpenMotion" width="360" />
+  <img src="public/openmotion-horizontal-light.svg" alt="OpenMotion" width="360" />
 </p>
 
 # OpenMotion
