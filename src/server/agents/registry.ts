@@ -34,6 +34,7 @@ export type StartAgentSessionInput = {
   agentId: string;
   episodeSlug: string;
   workspaceRoot?: string;
+  stdio?: "ignore" | "pipe";
 };
 
 export type AgentSessionErrorCode =
@@ -274,10 +275,15 @@ export function startAgentSession(
   state.sessions.set(sessionId, entry);
 
   try {
+    const stdio: "ignore" | ["pipe", "pipe", "pipe"] =
+      input.stdio === "pipe"
+        ? ["pipe", "pipe", "pipe"]
+        : "ignore";
+
     const child = spawn(agent.command, agent.args, {
       cwd,
       detached: true,
-      stdio: "ignore",
+      stdio,
       env: process.env,
       shell: false,
     });
@@ -325,6 +331,14 @@ export function getAgentSession(
   const entry = getRegistryState().sessions.get(sessionId);
 
   return entry ? snapshot(entry) : null;
+}
+
+export function getAgentProcess(
+  sessionId: string,
+): ChildProcess | null {
+  const entry = getRegistryState().sessions.get(sessionId);
+
+  return entry?.child ?? null;
 }
 
 export function listAgentSessions(): AgentSessionSnapshot[] {
