@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { SecurityBootstrap } from "@/components/SecurityBootstrap";
 
 export const metadata: Metadata = {
   title: "Workflow Studio",
@@ -9,7 +10,10 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="id">
-      <body>{children}</body>
+      <body>
+        <SecurityBootstrap />
+        {children}
+      </body>
     </html>
   );
 }
