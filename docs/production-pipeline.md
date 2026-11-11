@@ -20,7 +20,7 @@ Status: `idle → running → review → approved`, atau `failed`. Tahap baru me
 - `data/settings.json`: agen utama, Voice ID/model, seri, bahasa narasi/caption, pilihan timestamp. Tidak berisi key API.
 - `workspace/agents.json`: perintah ACP yang sudah login. Gunakan mode manual yang sesuai kemampuan agen.
 - `workspace/agents/shorts-episode-parallax`: salinan skill dan referensi dari repo. Template dan guide juga disalin jika belum ada. File pengguna tidak ditimpa.
-- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{remotionProject}}`, `{{audio}}`, `{{video}}`, `{{thumbnail}}`, `{{publish}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
+- Format template saat ini: `{{topic}}`, `{{title}}`, `{{series}}`, `{{number}}`, `{{language}}`, `{{captionsLanguage}}`, `{{modelId}}`, `{{skill}}`, `{{guide}}`, `{{previous}}`, `{{package}}`, `{{narration}}`, `{{tagged}}`, `{{audioMetadata}}`, `{{composition}}`, `{{remotionProject}}`, `{{audio}}`, `{{designSkill}}`, `{{agentsReadme}}`, `{{remotionSkill}}`, `{{video}}`, `{{thumbnail}}`, `{{publish}}`, `{{notes}}`. Variabel tidak dikenal menghasilkan error.
 
 Master narasi di paket menggunakan heading persis `## Master Voice-over` dan blok kode `text`. Hanya isi blok menjadi `01-naskah.md`. Angka jumlah kata dan catatan estimasi harus berada di luar blok. Agen mengikuti berkas skill secara eksplisit, tidak bergantung pada pemanggilan `$skill` khusus editor tertentu.
 
@@ -75,3 +75,13 @@ Setelah render final disetujui, langkah `thumbnail` menggunakan agen ACP untuk m
 Langkah `publish` menulis `06-publish.md` dengan bagian `## Judul` (satu baris, maksimal 100 karakter), `## Deskripsi` (maksimal 5000 karakter), dan `## Hashtag` (1–15 hashtag unik). UI menyediakan preview, editor Markdown, dan tombol salin terpisah. Kedua tahap mendukung pilihan agen/model/effort, izin, pembatalan, persetujuan, dan revisi. Tidak ada publikasi otomatis.
 
 Revisi thumbnail membatalkan persetujuan thumbnail dan publikasi. Revisi publikasi hanya memengaruhi publikasi. Episode baru maupun hasil migrasi memiliki tujuh langkah; hanya tahap publikasi yang disetujui menandai seluruh episode selesai.
+
+## Arahan kreator dan audio
+
+Kontrak kreator ditambahkan saat runtime ke tahap script/tags/scenes, termasuk ketika workspace masih memakai template lama. Prompt teknis dan scene ditulis dalam bahasa Inggris; bahasa narasi/label mengikuti Pengaturan, dengan default Bahasa Indonesia. Instruksi ini mendahului asumsi bahasa Inggris dalam skill generik. Narasi disusun percakapan, dengan jeda alami, dan tetap menjadi satu permintaan ElevenLabs serta satu track penuh di komposisi. Tahap tags tidak menerjemahkan atau mengubah naskah yang sudah disetujui.
+
+Paket diminta mencantumkan rencana gerak/transisi dan cue SFX. Komponen video mengikuti prinsip desain dari skill design-taste-frontend-v1 lokal, atau top-design bila tersedia; jika tidak ada, prompt memberi arahan visual konkret. File skill tidak disalin atau di-push. Aturan parallax, fakta, palette episode, Remotion berbasis frame, dan batas impor tetap mendahului aturan web dalam skill desain.
+
+Aplikasi merender watermark teks “Mystery Lab” di safe area kanan atas; agen tidak perlu menambah watermark kedua. Saat menyiapkan komposisi, server membentuk tiga WAV PCM lokal deterministik (`sfx-whoosh.wav`, `sfx-pop.wav`, `sfx-tap.wav`) dan memasukkannya ke public episode. Props `sfx.whoosh/pop/tap` menunjuk path untuk `staticFile()`. Agen boleh menambahkan Audio dalam Sequence singkat untuk cue yang diperlukan, volume maksimal 0.18 menurut kontrak prompt, tanpa memotong/menambah/mengulang VO atau musik. Cue berhenti sebelum end card senyap. Mutu timing/mix tetap ditinjau melalui preview.
+
+Hash SFX ikut tersimpan pada manifest preview. Render final menolak input yang berubah, termasuk SFX. Untuk menerapkan arah baru pada episode lama, gunakan revisi dari tahap yang terkait; perubahan bahasa narasi memerlukan revisi paket episode dan audio baru. File dan video yang sudah disetujui tidak dibuat ulang otomatis.

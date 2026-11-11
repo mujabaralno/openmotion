@@ -26,6 +26,7 @@ import { ThumbnailPreview } from "./thumbnail-preview";
 import { PublishPackPreview } from "./publish-pack-preview";
 import { STEP_KINDS, AGENT_STEP_KINDS } from "@/lib/pipeline-steps";
 import { DocumentMarkdown } from "./document-markdown";
+import { LogoIntro } from "./lottie";
 import { useUnsavedChanges } from "@/hooks/use-unsaved-changes";
 import { studioRequest } from "@/lib/studio-api";
 import { STEP_LABELS, STATUS_LABELS } from "@/lib/episode-labels";
@@ -155,6 +156,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
     };
   }, []);
   const step = data.steps.find((s) => s.kind === kind)!;
+  const preparingMedia = step.status === "running" || pendingAction === "run";
   const dirty = content !== saved;
   const busy =
     Boolean(data.task) || data.steps.some((s) => s.status === "running");
@@ -586,7 +588,12 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                   Jumlah karakter adalah perkiraan penggunaan. Kredit mengikuti
                   model dan paket ElevenLabs yang dipakai.
                 </p>
-                {data.files.includes("03-voiceover.mp3") ? (
+                {preparingMedia ? (
+                  <div className="audio-empty" role="status" aria-live="polite">
+                    <LogoIntro size={80} />
+                    <p>Voice-over sedang disiapkan.</p>
+                  </div>
+                ) : data.files.includes("03-voiceover.mp3") ? (
                   <audio
                     key={mediaVersion}
                     controls
@@ -616,8 +623,13 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                 </h3>
                 <small>9:16 / 30 FPS</small>
               </header>
-              <div className="video-stage">
-                {(
+              <div className="video-stage" aria-busy={preparingMedia}>
+                {preparingMedia ? (
+                  <div className="video-empty" role="status" aria-live="polite">
+                    <LogoIntro size={96} />
+                    <p>Video sedang disiapkan.</p>
+                  </div>
+                ) : (
                   kind === "scenes"
                     ? data.previewAvailable
                     : data.videoAvailable
@@ -637,11 +649,7 @@ export function ProductionWorkspace({ initial }: { initial: View }) {
                 ) : (
                   <div className="video-empty">
                     <Film size={42} />
-                    <p>
-                      {step.status === "running"
-                        ? "Video sedang disiapkan."
-                        : "Video akan muncul setelah tahap ini selesai."}
-                    </p>
+                    <p>Video akan muncul setelah tahap ini selesai.</p>
                   </div>
                 )}
               </div>

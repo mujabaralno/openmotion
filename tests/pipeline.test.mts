@@ -222,6 +222,12 @@ test('composition uses the shared project and preserves legacy source and origin
   assert.equal(fs.readFileSync(source, 'utf8'), fs.readFileSync(legacySource, 'utf8'));
   assert.deepEqual(fs.readFileSync(artifactPath(episode.slug, 'audio.mp3', 'composition-public')), fs.readFileSync(artifactPath(episode.slug, '03-voiceover.mp3')));
   assert.match(fs.readFileSync(artifactPath(episode.slug, 'index.tsx', 'composition'), 'utf8'), new RegExp(`episodes/${episode.slug}/audio.mp3`));
+  const entry = fs.readFileSync(artifactPath(episode.slug, 'index.tsx', 'composition'), 'utf8');
+  assert.match(entry, /Mystery Lab/);
+  assert.equal((entry.match(/<Audio src=/g) ?? []).length, 1);
+  const props = JSON.parse(fs.readFileSync(artifactPath(episode.slug, 'props.json', 'composition'), 'utf8'));
+  assert.equal(props.sfx.pop, `episodes/${episode.slug}/sfx-pop.wav`);
+  assert.equal(fs.readFileSync(artifactPath(episode.slug, 'sfx-pop.wav', 'composition-public')).toString('ascii',0,4), 'RIFF');
   fs.appendFileSync(source, '\n// newer shared-project source');
   prepareComposition(episode.slug);
   assert.match(fs.readFileSync(source, 'utf8'), /newer shared-project source/);
@@ -282,4 +288,27 @@ test('post-production gates, permission decisions, publication editing, and scop
   reviseStep(episode.slug, 'thumbnail', 'Make the subject larger.');
   assert.deepEqual(getSteps(episode.slug).map(step => step.status), [...Array(5).fill('approved'), 'idle', 'idle']);
   assert.equal(readArtifact(episode.slug, '05-thumbnail.svg'), svg);
+});
+
+
+test('creator direction overrides legacy templates without changing those files', () => {
+  const episode = createEpisode({ title: 'Creator direction', topic: 'Motion educational' });
+  const template = path.join(process.env.WORKSPACE_DIR!, 'prompts', 'script.md');
+  const original = fs.readFileSync(template, 'utf8');
+  try {
+    fs.writeFileSync(template, 'Create the complete package. Legacy English narration instructions.');
+    const prompt = buildStepPrompt(episode.slug, 'script', 'Keep the explanation legible');
+    assert.match(prompt, /master voice-over must be in Bahasa Indonesia/);
+    assert.match(prompt, /production instructions and scene prompts in English/);
+    assert.match(prompt, /educational 2.5D parallax/);
+    assert.match(prompt, /Mystery Lab/);
+    assert.match(prompt, /Sound Effects cue plan/);
+    assert.match(prompt, /ONE continuous ElevenLabs track/);
+    assert.equal(fs.readFileSync(template, 'utf8'), 'Create the complete package. Legacy English narration instructions.');
+    const tags = buildStepPrompt(episode.slug, 'tags', '');
+    assert.match(tags, /Never translate or rewrite an already approved script/);
+    const scenes = buildStepPrompt(episode.slug, 'scenes', '');
+    assert.match(scenes, /props.sfx.whoosh/);
+    assert.match(scenes, /at or below 0.18/);
+  } finally { fs.writeFileSync(template, original); }
 });

@@ -3,6 +3,7 @@ Topic: {{topic}}
 Title: {{title}}
 Series: {{series}}. Episode number: {{number}}.
 Narration language: {{language}}. Scene titles and visual labels language: {{captionsLanguage}}. The app overlays synchronized narration captions in the narration language.
+Write all technical production instructions and scene prompts in English, while writing the actual voice-over in {{language}}. The app language setting overrides generic skill defaults.
 Read and follow the skill at {{skill}} and its episode-template.md and style-bible.md references. Research factual claims using available web tools and cite primary/institutional sources. If sources cannot be checked, say so in the package and do not present unverified claims as established facts.
 Read the previous approved episode package at {{previous}} if available, to keep series constants and record honest variation.
 Save the FULL package to {{package}}. Include the complete scene-by-scene prompts, accuracy note with source links, palette, layer map, camera plan, and production notes. Do not stop at a summary in chat.
@@ -16,3 +17,5 @@ Write the actual original narration in that block, not the example sentence abov
 Work only on this episode. Do not run an AI model through another paid API, generate audio, or render video in this stage. Finish by naming the output file.
 
 Also read the creator's shared visual guide at {{guide}} and follow its series constants.
+
+Use educational kinetic motion, smooth eased transitions, and story-specific component design informed by {{designSkill}}. Keep diagrams readable, bring characters and environments to life through purposeful subtle motion, and avoid generic slides or repetitive cards. Include explicit Motion & Transitions and Sound Effects cue plans. Reserve the upper-right safe area for the app-owned "Mystery Lab" watermark. Plan a few quiet whoosh/pop/tap accents without breaking the single continuous narration track.

@@ -10,8 +10,8 @@ export function getSettings(): StudioSettings {
   return {
     agentId: saved.agentId ?? '', voiceId: saved.voiceId ?? process.env.ELEVENLABS_VOICE_ID ?? '',
     modelId: saved.modelId || process.env.ELEVENLABS_MODEL_ID?.trim() || 'eleven_v3',
-    series: saved.series ?? 'Everyday Why', language: saved.language ?? 'English',
-    captionsLanguage: saved.captionsLanguage ?? 'English', timestamps: saved.timestamps ?? true,
+    series: saved.series ?? 'Everyday Why', language: saved.language ?? 'Bahasa Indonesia',
+    captionsLanguage: saved.captionsLanguage ?? 'Bahasa Indonesia', timestamps: saved.timestamps ?? true,
   };
 }
 export function saveSettings(input: unknown): StudioSettings {

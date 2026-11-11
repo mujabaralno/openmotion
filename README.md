@@ -17,6 +17,8 @@ cp .env.local.example .env.local
 npm run dev
 ```
 
+Mode development memakai Webpack untuk menghindari kompilasi berulang yang teramati pada Turbopack. Setelah mengubah script ini, hentikan dev server lama lalu jalankan kembali `npm run dev`.
+
 Isi `WORKSPACE_DIR` dengan path absolut dan `ELEVENLABS_API_KEY` di `.env.local`, lalu restart server. Buka http://127.0.0.1:3000. Aplikasi hanya untuk komputer sendiri. `APP_PORT` harus sesuai port Next.js jika menggunakan port selain 3000.
 
 Di **Pengaturan**:
@@ -44,6 +46,8 @@ Opsional, hubungkan channel YouTube dengan izin baca untuk menyinkronkan statist
 
 7. **Thumbnail:** setelah video disetujui, agen membuat cover SVG 1080×1920 dari visual source episode. Tinjau preview, unduh SVG, lalu setujui atau minta revisi.
 8. **Paket publikasi:** agen menyiapkan judul, deskripsi, dan hashtag sesuai video dan thumbnail. Tinjau, edit bila perlu, salin tiap bagian, lalu setujui untuk menyelesaikan episode. Pengunggahan dilakukan sendiri.
+
+Arahan produksi bawaan menggunakan prompt teknis berbahasa Inggris dan narasi/teks scene Bahasa Indonesia. Prompt meminta gerakan kinetik edukatif, transisi halus, komponen yang dirancang sesuai cerita, dan SFX seperlunya. Aplikasi menambahkan watermark “Mystery Lab”, mempertahankan voice-over satu track utuh, dan menyediakan cue whoosh/pop/tap lokal. Bahasa tetap dapat diubah di Pengaturan.
 
 Setiap tahap dapat dibatalkan. Refresh browser menyambung ulang ke pekerjaan yang masih berjalan. Server restart menandai pekerjaan yang terputus sebagai gagal; prompt dan panggilan berbayar tidak diulang otomatis. Isi file tahap berikutnya dibaca dari workspace, bukan disalin kembali dari chat.
 

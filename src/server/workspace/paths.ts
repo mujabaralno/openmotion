@@ -38,7 +38,7 @@ export const WORKSPACE_FILE_WHITELIST: Record<
   composition: ["Episode.tsx", "index.tsx", "props.json"],
   "composition-public": ["audio.mp3", "timestamps.json"],
   "project-composition": ["Episode.tsx", "index.tsx", "props.json"],
-  "project-public": ["audio.mp3", "timestamps.json"],
+  "project-public": ["audio.mp3", "timestamps.json", "sfx-whoosh.wav", "sfx-pop.wav", "sfx-tap.wav"],
   logs: [
     "script.jsonl",
     "tags.jsonl",

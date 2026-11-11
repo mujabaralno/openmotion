@@ -10,6 +10,7 @@ import { artifactPath, readArtifact, writeArtifact, hasArtifact } from './files.
 import { getSettings } from './settings.ts';
 import { assertCanRun, beginStep, getSteps, requestRevision, setStep } from './state.ts';
 import { buildStepPrompt } from './prompts.ts';
+import { SFX_FILES } from './sfx.ts';
 import { prepareComposition } from './composition.ts';
 import { generateVoiceover } from '../elevenlabs/client.ts';
 import { AGENT_STEP_KINDS } from '../../lib/pipeline-steps.ts';
@@ -24,6 +25,7 @@ const runtime = () => runtimeGlobal.__openMotionPipeline ??= { tasks: new Map(),
 const taskActive = (slug: string, task: Task) => runtime().tasks.get(slug)?.id === task.id && !task.controller.signal.aborted;
 function checkActive(slug: string, task: Task) { if (!taskActive(slug, task)) throw new Error('Pekerjaan dibatalkan.'); }
 const hash = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
+const sfxHash = (slug: string) => hash(Buffer.concat(Object.values(SFX_FILES).map(name => fs.readFileSync(artifactPath(slug, name, 'composition-public')))));
 
 export function pipelineView(slug: string) {
   const episode = getEpisodeBySlug(slug);
@@ -136,7 +138,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
             const metadata = prepareComposition(slug);
             await renderEpisode(slug, task, true);
             checkActive(slug, task);
-            writeArtifact(slug, '04-scenes.json', JSON.stringify({ ...metadata, composition: 'Episode', sourceHash: hash(code), audioHash: hash(fs.readFileSync(artifactPath(slug, '03-voiceover.mp3'))), propsHash: hash(fs.readFileSync(artifactPath(slug, 'props.json', 'composition'))), entryHash: hash(fs.readFileSync(artifactPath(slug, 'index.tsx', 'composition'))), publicAudioHash: hash(fs.readFileSync(artifactPath(slug, 'audio.mp3', 'composition-public'))), createdAt: new Date().toISOString() }, null, 2));
+            writeArtifact(slug, '04-scenes.json', JSON.stringify({ ...metadata, composition: 'Episode', sfxHash: sfxHash(slug), sourceHash: hash(code), audioHash: hash(fs.readFileSync(artifactPath(slug, '03-voiceover.mp3'))), propsHash: hash(fs.readFileSync(artifactPath(slug, 'props.json', 'composition'))), entryHash: hash(fs.readFileSync(artifactPath(slug, 'index.tsx', 'composition'))), publicAudioHash: hash(fs.readFileSync(artifactPath(slug, 'audio.mp3', 'composition-public'))), createdAt: new Date().toISOString() }, null, 2));
           }
           checkActive(slug, task); setStep(slug, kind, 'review');
         }, onFailure: fail, onSettled: settle });
@@ -148,7 +150,7 @@ export async function runPipelineStep(slug: string, kind: StepKind, input: { age
         if (kind === 'voiceover') { task.phase = 'Menghasilkan audio ElevenLabs'; await generateVoiceover(slug, task.controller.signal); }
         else {
           const manifest = JSON.parse(readArtifact(slug, '04-scenes.json'));
-          if (manifest.sourceHash !== hash(fs.readFileSync(artifactPath(slug, 'Episode.tsx', 'composition'))) || manifest.audioHash !== hash(fs.readFileSync(artifactPath(slug, '03-voiceover.mp3'))) || manifest.propsHash !== hash(fs.readFileSync(artifactPath(slug, 'props.json', 'composition'))) || manifest.entryHash !== hash(fs.readFileSync(artifactPath(slug, 'index.tsx', 'composition'))) || manifest.publicAudioHash !== hash(fs.readFileSync(artifactPath(slug, 'audio.mp3', 'composition-public')))) throw new Error('Komposisi atau audio berubah setelah preview. Minta revisi scene dan tinjau preview kembali.');
+          if (manifest.sfxHash !== sfxHash(slug) || manifest.sourceHash !== hash(fs.readFileSync(artifactPath(slug, 'Episode.tsx', 'composition'))) || manifest.audioHash !== hash(fs.readFileSync(artifactPath(slug, '03-voiceover.mp3'))) || manifest.propsHash !== hash(fs.readFileSync(artifactPath(slug, 'props.json', 'composition'))) || manifest.entryHash !== hash(fs.readFileSync(artifactPath(slug, 'index.tsx', 'composition'))) || manifest.publicAudioHash !== hash(fs.readFileSync(artifactPath(slug, 'audio.mp3', 'composition-public')))) throw new Error('Komposisi atau audio berubah setelah preview. Minta revisi scene dan tinjau preview kembali.');
           await renderEpisode(slug, task, false);
         }
         checkActive(slug, task); setStep(slug, kind, 'review');

@@ -2,3 +2,5 @@ Prepare narration for ElevenLabs, using the approved master narration in {{narra
 Write {{tagged}} as plain paste-ready narration with appropriate, restrained audio emotion/delivery tags supported by that model. Preserve every spoken word and its order. Do not add introductions, headings, Markdown fences, commentary, scene labels, or visual instructions. Do not copy the full episode package. Use natural pauses. Audio is generated later by the application as ONE complete track.
 {{notes}}
 Only edit the requested output file. Do not call ElevenLabs yourself.
+
+Preserve natural spoken phrasing and sentence-level breathing room across the whole episode. Do not split the voice-over by scene or insert whoosh/pop/tap directions into the narration; those effects are added separately during assembly.

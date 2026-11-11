@@ -89,3 +89,5 @@ Tes ada di `tests/workspace-paths.test.mts` dan mencakup:
 |------|--------|
 | `src/server/workspace/paths.ts` | Penjaga path dan daftar putih |
 | `tests/workspace-paths.test.mts` | Unit test |
+
+Area `project-public` juga mengizinkan `sfx-whoosh.wav`, `sfx-pop.wav`, dan `sfx-tap.wav` di public episode proyek Remotion. Aplikasi membuat ketiganya; agen hanya merujuk path yang diberikan dalam props.

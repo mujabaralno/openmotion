@@ -65,7 +65,7 @@ function ResearchConversation({threadId,execution,ready,onCreated,onRefresh,onUs
   return <section className="research-conversation" aria-label="Percakapan riset">
     <header><div><MessageSquare size={17}/><h2>{view?.thread.title??'Mulai dari rasa ingin tahu'}</h2></div><Button size="sm" variant="ghost" onClick={onUseTopic}><Plus size={14}/>Buat episode</Button></header>
     <div className="research-messages" ref={scrolling} onScroll={()=>{const el=scrolling.current;if(el)nearBottom.current=el.scrollHeight-el.scrollTop-el.clientHeight<100;}}>
-      {!view?.messages.length?<div className="research-empty"><BookOpen size={30}/><h3>Ide baru, berakar dari channel kamu.</h3><p>Diskusikan topik, cari hubungan dengan episode sebelumnya, atau lihat pola dari statistik YouTube.</p><div>{suggestions.map(prompt=><button key={prompt} disabled={pending||!ready} onClick={()=>setText(prompt)}>{prompt}</button>)}</div></div>:null}
+      {!view?.messages.length?<div className="research-empty"><span className="research-eyebrow">RUANG EKSPLORASI</span><h3>Cerita berikutnya<br/>dimulai dari pertanyaan.</h3><p>Diskusikan topik, cari hubungan dengan episode sebelumnya, atau lihat pola dari statistik YouTube.</p><div>{suggestions.map((prompt,index)=><button key={prompt} disabled={pending||!ready} onClick={()=>setText(prompt)}><span className="research-prompt-number" aria-hidden="true">0{index+1}</span><span><strong className="research-prompt-title">{['Temukan sudut pandang baru','Baca pola audiens','Pertajam ide episode'][index]}</strong>{prompt}</span><ArrowUp className="research-prompt-arrow" size={16} aria-hidden="true"/></button>)}</div></div>:null}
       {view?.messages.map(message=><article key={message.id} className={`research-message research-${message.role}`}>
         <header><strong>{message.role==='user'?'Kamu':'Riset OpenMotion'}</strong><small>{message.role==='assistant'?[message.modelId,message.effort].filter(Boolean).join(' · '):''}</small></header>
         {message.content?<DocumentMarkdown content={message.content} fileName="jawaban riset"/>:null}
@@ -120,7 +120,7 @@ export function ResearchWorkspace(){
     try{const result=await studioRequest<{episode:{slug:string}}>('/api/episodes','POST',{title:'',topic:topic.trim()});router.push(`/episodes/${result.episode.slug}`);}catch(error){setTopicError(error instanceof Error?error.message:'Episode belum dibuat.');}finally{setCreating(false);}
   }
   return <>
-    <div className="page-heading"><div><p className="studio-kicker">Sebelum produksi</p><h1>Riset topik</h1><p>Temukan ide berikutnya dari cerita yang sudah dibuat dan respons audiens.</p></div></div>
+    <div className="page-heading research-heading"><div><p className="studio-kicker">OpenMotion / Research</p><h1>Riset topik</h1><p>Temukan ide berikutnya dari cerita yang sudah dibuat dan respons audiens.</p></div></div>
     {error?<p className="studio-error" role="alert">{error}</p>:null}{notice?<p className="studio-notice" role="status">{notice}</p>:null}
     <div className="research-layout"><div className="research-primary">
       <div className="research-toolbar"><label>Percakapan<select aria-label="Pilih percakapan riset" value={threadId??''} onChange={event=>selectThread(event.target.value||null)}><option value="">Riset baru</option>{status?.threads.map(thread=><option key={thread.id} value={thread.id}>{thread.title}</option>)}</select></label><Button size="sm" variant="outline" onClick={()=>selectThread(null)}><Plus size={14}/>Riset baru</Button></div>

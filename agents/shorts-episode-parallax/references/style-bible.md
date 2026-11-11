@@ -1,120 +1,193 @@
-# Style bible — 2.5D parallax flat-vector explainer
+# Style bible: 2.5D parallax explainer
 
-The look this series aims for: flat vector illustration with no outlines, drawn in layers, with a virtual camera that pushes in and pulls back so the layers slide past each other at different speeds. Foreground and background layers are softly blurred while the subject stays sharp. Characters are simple and friendly. Light (sun rays, glow) is saved for the big reveal.
+Two readers use this file. The **author** (writes the episode file) uses it to choose palette, character, camera and wording. The **builder** (Codex, builds the video in Remotion) uses it as the quality bar. Everything described here can be drawn by code.
 
-It is inspired by the explainer-animation genre (layered 2D scenery, cutout characters, parallax camera). Use it as a *style* reference only. Never copy another channel's characters, mascots, logos, or scenes.
+Contents: 1 Constants and variables · 2 Style variants · 3 Palette · 4 Depth layers · 5 Characters · 6 Motion and liveliness · 7 Camera · 8 Light · 9 Kinetic typography · 10 Transitions · 11 Component design rules · 12 Branding · 13 Safe area · 14 Sound · 15 Failure modes and fixes
 
-Everything must be drawable by code (SVG, CSS, Remotion transforms). Do not ask Codex for photos, stock footage, or generated images.
+The look: flat vector illustration without outlines, drawn in layers, with a virtual camera that pushes in and pulls back so the layers slide past each other at different speeds. Far and near layers are softly blurred while the subject stays sharp. Characters are simple and friendly. Light (sun rays, glow) is saved for the one big reveal. It is inspired by the explainer-animation genre. Use it as a *style* reference only; never copy another channel's characters, mascots, logos or scenes.
 
 ## 1. Series constants vs episode variables
 
 | Constant (never changes) | Variable (changes every episode) |
 |---|---|
-| Flat vector, no outlines | Setting and palette family |
+| Flat vector, no outlines (see variants) | Setting and palette family |
 | Soft elliptical ground shadows | Main character design and role |
-| Subtle paper grain overlay | Hook formula |
+| Subtle paper grain and vignette | Hook formula |
 | One rounded sans-serif family | Primary camera move |
-| Caption style | Type of bold moment |
-| Info-card style | Props and background details |
-| End-card layout | |
+| Kinetic typography rules (section 9) | Type of bold moment |
+| Transition language (section 10) | Props and background details |
+| Info-card style, end-card layout | Narration sentence rhythm |
+| "Mystery Lab" watermark (section 12) | |
+| Sound language (section 14) | |
 
-## 2. Palette rules
+## 2. Style variants
 
-- Each episode uses about 6-8 flat colors plus one ink color for text. Ink is a constant dark blue-gray (for example `#2B3A42`); everything else is chosen from the episode's palette family.
-- Build the palette in three groups: **backdrop** (sky, far hills, distant walls: desaturated, lighter), **middle** (the setting: medium saturation), **subject** (the character and the thing being explained: the most saturated colors on screen).
-- Far layers get lighter and cooler with distance (atmospheric perspective). Near layers get slightly darker and warmer.
-- Palette families to rotate through: lagoon sunrise (peach, mint, teal), kitchen interior (cream, terracotta, sage), night sky (indigo, violet, warm yellow accents), desert noon (sand, coral, sky blue), forest morning (olive, moss, amber), harbor dusk (slate blue, orange, rose). Do not use the same family two episodes in a row.
-- No pure black. No neon. No red or warning colors unless the topic truly calls for it.
-- Keep text contrast high: dark ink on light cards, white on dark pills.
+The default is **flat-parallax** (this whole file). A variant changes the *look* only; kinetic typography, transitions, watermark, safe area and sound rules stay the same. Name the variant in the episode's `Visual Style` line.
 
-## 3. Depth layers
+| Variant | What changes |
+|---|---|
+| flat-parallax (default) | As described in this file |
+| comic | Thick ink outlines allowed (6-8 px, ink color), halftone dot texture on shadows, flat fills with one spot color, caption-box style labels, info cards shaped like comic panels, "panel" moves (zoom into a panel, slide to the next) instead of parallax-only moves |
 
-Depth is a number from 0 (infinitely far) to 1 (closest to the camera). It controls how fast a layer moves with the camera, how much it scales during zooms, and how blurred it is when out of focus.
+## 3. Palette rules
+
+- About 6-8 flat colors per episode plus one ink color for text. Ink is a constant dark blue-gray (for example `#2B3A42`).
+- Three groups: **backdrop** (sky, far hills; desaturated, lighter), **middle** (the setting; medium saturation), **subject** (character and the thing being explained; the most saturated colors on screen).
+- Far layers get lighter and cooler with distance. Near layers get slightly darker and warmer.
+- Palette families to rotate through: lagoon sunrise (peach, mint, teal), kitchen interior (cream, terracotta, sage), night sky (indigo, violet, warm yellow), desert noon (sand, coral, sky blue), forest morning (olive, moss, amber), harbor dusk (slate blue, orange, rose), volcanic ash (charcoal, ember orange, pale gray). Never the same family twice in a row (check `series-log.md`).
+- No pure black, no neon, no red or warning colors unless the topic truly calls for them. Keep text contrast high: dark ink on light, white on dark pills.
+
+## 4. Depth layers
+
+Depth runs from 0 (infinitely far) to 1 (closest). It controls how fast a layer moves with the camera, how much it scales during zooms, and how blurred it is out of focus.
 
 | Depth | Layer | Typical contents |
 |---|---|---|
 | 0.00 | Sky | Gradient, soft clouds, sun or moon |
 | 0.15 | Far scenery | Mountains, skyline, distant trees |
-| 0.30 | Mid scenery | Buildings, fences, main trees, the large setting |
-| 0.50 | Subject plane | The character and the thing being explained; **the default focal plane** |
+| 0.30 | Mid scenery | Buildings, fences, main trees |
+| 0.50 | Subject plane | Character and the thing explained; the default focal plane |
 | 0.70 | Near props | Crates, plants, animals close to the subject |
-| 0.90 | Foreground | Large blurred leaves, flowers, edges of objects, partly cropped |
+| 0.90 | Foreground | Large blurred leaves, edges of objects, partly cropped |
 
-Rules:
-- The subject plane (0.5) is sharp unless a rack focus moves the focus elsewhere.
-- Blur grows with distance from the focus depth. Typical maximum blur is about 8-14 px at 1080×1920 for the farthest layers and the foreground.
-- Use at most about 8 layers per scene and at most 3 blurred layers at once.
-- In a vertical 9:16 frame, stack the world vertically: sky at the top, scenery in the upper-middle, the subject in the lower-middle, foreground at the bottom. Do not simply crop a horizontal landscape.
+- The subject plane is sharp unless a rack focus moves the focus elsewhere.
+- Maximum blur about 8-14 px at 1080×1920 for the farthest layers and the foreground.
+- At most about 8 layers per scene and 3 blurred layers at once.
+- In 9:16, stack the world vertically: sky at the top, scenery upper-middle, subject lower-middle, foreground at the bottom. Do not crop a horizontal landscape.
 
-## 4. Characters
+## 5. Characters
 
-Characters are built from simple shapes so Codex can draw them as SVG and animate the parts.
+- Head: circle. Body: rounded rectangle or trapezoid. Limbs: capsules. Hands and feet: small circles. Face: two dark ovals, a small curve for a mouth.
+- A hat, hair shape or headband gives each character a silhouette. **Change silhouette, proportions and outfit every episode**; two episodes in a row must not share a head-to-body ratio.
+- Fill colors only: skin, outfit (two colors), accessory, one darker tone for shading. No gradients on the body.
+- Each character has 3-4 poses (idle, pointing, surprised, holding something). Swap poses at beat changes, with a 6-10 frame tween.
+- Animals and objects: simplified silhouettes with two or three markings. Mechanisms are simplified cutaways or diagrams with arrows, labeled "Ilustrasi disederhanakan."
+- Groups (flock, crowd): same shapes with small differences in scale, color and idle `phase`.
 
-**Construction**
-- Head: a circle. Body: a rounded rectangle or a trapezoid. Limbs: capsules (thick rounded lines). Hands and feet: small circles or ellipses.
-- Face: two small dark ovals for eyes; a small curve for a mouth; no nose, or a tiny shape. Blinks are a quick vertical squash of the eyes.
-- A hat, cap, hair shape, or headband gives each character a recognizable silhouette. Change this every episode.
-- Fill colors only: skin tone, outfit (two colors), accessory, and a single darker tone for shading shapes. No outlines, no gradients on the body (gradients are allowed on backgrounds and light effects).
-- A soft ellipse under the feet is the ground shadow.
+## 6. Motion and liveliness
 
-**Poses and motion**
-- Each character has 3-4 pose variants (idle, pointing, surprised, holding something). Swap poses at beat changes.
-- Always-on idle motion: a slow breathing bob (a few pixels, around 0.8 Hz) and an occasional blink every 2-4 seconds.
-- Group scenes (a flock, a herd, a crowd): duplicate the same shapes with small differences in scale, color, and idle phase so they do not move in sync.
+The most common reason a Remotion video feels cheap is that things sit still. Rules:
 
-**Animals and objects**
-- Same rules: simplified silhouettes with two or three markings, no outlines, ground shadow.
-- Show anatomy or mechanisms as simplified cutaways or diagrams with arrows, never as realistic renderings. Label them "Simplified illustration."
+- **Three motions at all times:** the camera, the character (idle), and at least one environment loop. Nothing is perfectly still for more than 1 second.
+- Idle loops (use `useIdle` / `useBlink` from the engine):
 
-## 5. Camera moves
+| Element | Motion |
+|---|---|
+| Character | Bob 3-5 px at 0.7-0.9 Hz; blink every 2-4 s (closed 3-4 frames); small head turn on beat changes |
+| Plants, reeds | Rotate ±2° at 0.2-0.35 Hz, each with its own phase |
+| Clouds, mist | Drift 8-20 px per second |
+| Water, light | Slow ripple or shimmer, amplitude under 6 px |
+| Particles | 6-14 dots in the foreground drifting at different speeds |
 
-The camera is virtual: it has x, y, zoom, and a focus depth, animated with easing (ease-in-out cubic is the default).
+- **Entrances** use springs, not linear fades: `SPRINGS.pop` for text and small items, `SPRINGS.soft` for panels and cards, `SPRINGS.snappy` for UI chips. Stagger related items 3-5 frames apart.
+- **Camera** uses ease-in-out (cubic). Moves last 90-300 frames. Hold still for a beat on each key line.
+- Anticipation for big moves: 4-6 frames of a small opposite move before the main move (optional, one per episode).
+- Pose changes and color changes use eased tweens of 8-24 frames, never instant swaps.
+
+## 7. Camera
+
+The camera has x, y, zoom and a focus depth, animated with keyframes.
 
 | Move | What it does | Use for |
 |---|---|---|
-| Push-in | Slow zoom toward the subject (for example 1.1 → 1.3 over a scene) | Hook, emphasis |
-| Pull-back reveal | Zoom out (for example 2.4 → 1.0) so the viewer sees where the subject lives | The bold moment, scale or context reveals |
-| Tilt-up reveal | Camera moves upward to reveal what is above or beyond; the vertical equivalent of a landscape pan | Vertical 9:16 reveals |
-| Lateral drift | Slow sideways travel; layers slide at different speeds | Transitions, "meanwhile" beats |
-| Rack focus | Focus depth shifts from one layer to another; blur follows | Directing attention to a detail |
+| Push-in | Slow zoom toward the subject (1.1 → 1.3) | Hook, emphasis |
+| Pull-back reveal | Zoom out (2.4 → 1.0) | The bold moment, scale or context |
+| Tilt-up reveal | Camera rises to show what is above | Vertical reveals |
+| Lateral drift | Slow sideways travel (x 0 → 120) | "Meanwhile" beats, continuing a slide transition |
+| Rack focus | Focus depth shifts from one layer to another | Directing attention |
 
-Rules:
-- One primary camera move per episode as the signature; secondary moves are small.
-- Never whip or shake the camera; it reads as noisy on a phone.
-- Moves start and end with easing; hold still for a beat on each key line.
+- One primary move per episode as the signature; secondary moves are small (zoom change under 0.2, travel under 140 px).
+- Never whip or shake; it reads as noise on a phone.
 
-## 6. Light and atmosphere
+## 8. Light and atmosphere
 
-- **Sun rays and glow** are reserved for the bold moment: a few soft translucent wedges from a light source, a bright core, and a slight bloom. Use screen-style blending and low opacity.
-- **Vignette**: a very subtle darkening at the corners on every scene.
-- **Grain**: a faint paper-grain overlay (a few percent opacity) that is part of the series constants.
-- **Floating particles** (pollen, dust, bubbles) are allowed in small numbers, in the foreground layers, to make depth obvious.
-- No lens flares, no heavy bloom, no color-grading filters that change between scenes.
+- **Sun rays and glow** only for the bold moment: a few soft translucent wedges from a light source, screen blending, low opacity.
+- **Vignette** on every scene (very subtle). **Grain** overlay a few percent (series constant). Floating particles only in foreground layers.
+- No lens flares, no heavy bloom, no color grading that changes between scenes.
 
-## 7. Info card (the labeled-card infographic)
+## 9. Kinetic typography (educational)
 
-A translucent, rounded panel that floats in the scene to present a fact, a "profile", or a labeled diagram.
+The on-screen text is the narration made visible. It exists to help the viewer follow and remember, not to decorate.
 
-- Rounded rectangle, white or pale-tinted fill at about 75-85 percent opacity, soft shadow.
-- A bold uppercase title in the series typeface, then two to four key-value rows ("Name: ...", "Where: ...").
-- Remaining detail is suggested by gray rounded bars as placeholder text lines, which keeps the card readable without small print.
-- A small flat icon or illustration in a rounded square at one side.
-- Enters with a gentle slide and fade, leaves the same way. Never more than one card on screen.
+- Words come from the voice-over timestamps, so each word appears exactly when it is spoken. Use `<KineticLine>`.
+- **One phrase at a time**, 2-6 words, maximum 2 lines, centered, width at most 896 px.
+- Sizes at 1080×1920: key phrase 84-104 px, supporting text 64-72 px, footnotes 30-34 px. Nothing the viewer must read is below 56 px.
+- **Emphasis on 1-2 words per phrase** (accent color, underline sweep, small overshoot). Emphasize the word the voice stresses, not just the noun.
+- A phrase leaves about 20 frames after its last word, with an 8-frame exit. Never two phrases on screen together.
+- Text never covers the character's face or the thing being explained. Choose the upper third (y 192-600) or the lower-middle band (y 1000-1300) per scene and keep that choice for the whole scene.
+- Numbers and dates count up or tick into place. Labels attach to what they name (arrow or adjacency), never float alone.
+- Bold weight, rounded sans-serif, dark ink on light backdrops or white on a dark rounded pill. Soft shadow only for legibility.
 
-## 8. Typography and captions
+## 10. Transitions
 
-- One rounded sans-serif family for the whole series (chosen once on episode #01 and kept; Remotion can load it through `@remotion/google-fonts`). Weights: bold for titles and captions, regular for card rows.
-- Word-level captions from the ElevenLabs timestamps, a few words at a time, large, bold, white with a soft dark shadow or on a dark rounded pill. The caption position is a series constant.
-- On-screen quotes in the Codex prompts must be exact; Remotion handles the final pixel-perfect text.
+No hard cuts. Scenes overlap by 12-18 frames (default 14): the outgoing scene is still moving while the incoming scene arrives (`<SceneShell>`).
 
-## 9. Mobile safe area (9:16)
+| Pair | When |
+|---|---|
+| fade → fade | Calm continuation |
+| fade → slide-up | A reveal or a new idea |
+| slide-up → slide-left | Moving "along" the scene, continues a lateral drift |
 
-- Keep the subject and all text between roughly 10 percent and 75 percent of the frame height, and leave about 12 percent free on the right edge. Shorts and TikTok draw the title, buttons, and captions over the bottom and right of the frame.
-- Layouts change between apps and updates, so tell the user to preview an upload in the app before relying on exact margins.
-- Backgrounds and foreground layers may fill the whole frame; only important content must stay inside the safe area.
+- Do not use the same pair twice in a row. Carry one element across the cut when possible (a foreground leaf, a light ray, a color that continues).
+- A soft whoosh starts with the transition (see section 14).
 
-## 10. Sound
+## 11. Component design rules
 
-- Voice-over (ElevenLabs) first; music very quiet under it (calm, acoustic or soft synth, no lyrics).
-- Light sound design on key beats: soft whooshes for camera moves, a gentle pop for card entrances, a warm chime for the bold moment.
-- The end card may have a short chime and no voice-over.
+Applies to the info card, labels, arrows, caption pills, chips and the end card. If the `/top-design` skill is installed, apply it. If not, apply these rules.
+
+**Specificity test.** Each UI piece must contain at least one thing that exists only in this episode: a palette color, a shape motif from the subject (feather, bolt, wave), or wording from the narration. If a piece could be pasted unchanged into another episode, redesign it.
+
+**Info card**
+- Rounded rectangle (radius 28-40 px), white or palette-tinted fill at 78-85 percent opacity, soft shadow, one small flat icon in a rounded square.
+- Bold uppercase title (40-46 px), two to four key-value rows (36-40 px). Enters with `SPRINGS.soft` from 60 px to the side, leaves the same way. One card on screen at most.
+- Gray placeholder bars only when the card represents a document or profile.
+
+**Do not**
+- Default purple-blue gradients, glassmorphism on everything, emoji as icons, system-default fonts.
+- The same white card repeated for every fact, or a centered stack of equal-width boxes.
+- Arrows that do not touch what they point to, labels with no connection to a shape.
+
+**Do**
+- Vary shape language per episode (pill, tab, ribbon, tag) while keeping series constants (type family, caption style, safe area).
+- Spend design effort on the one bold moment; keep the rest quiet.
+
+## 12. Branding
+
+- Watermark text `Mystery Lab`, bold rounded sans-serif, 38 px, ink color at 60 percent opacity, top-left at x 54, y 120. Rendered once in `Episode.tsx` above all scenes, so it appears on every frame including the end card.
+- End card: the twist line large over a warm sunburst gradient, a small flat illustration of the key subject, series name and episode number, slow pull-back, grain. Keep the layout identical between episodes; only the line and the illustration change.
+
+## 13. Safe area (1080×1920)
+
+- Content that matters stays inside `SAFE` (left 54, right 130, top 192, bottom 480 px, from `src/engine/overlays.tsx`). Shorts and TikTok draw their UI over the bottom and right edges; layouts change, so preview an upload in the app.
+- Backgrounds and foreground layers may fill the whole frame. During development, draw `<SafeAreaDebug/>` in stills to catch overlaps.
+
+## 14. Sound
+
+- **Voice-over:** one continuous file for the whole episode, never cut per scene. Made outside the video (Voicebox or any TTS), delivered with word timestamps (from the provider if it offers them, otherwise from speech recognition plus `alignWords`). Volume 1.0.
+- **Music:** calm, no lyrics, volume 0.08-0.12, 20-frame fade-in, 45-frame fade-out. Optional.
+- **SFX map** (`SfxCue` at absolute frames in `episode.data.ts`):
+
+| Moment | Sound | Volume |
+|---|---|---|
+| Scene transition (at the start of the overlap) | whoosh | 0.20-0.28 |
+| Key phrase or info card enters | pop or tick, once per phrase | 0.15-0.25 |
+| Into the bold moment | riser (1.2 s) ending at the reveal | 0.30 |
+| The reveal itself | chime | 0.30 |
+| End card | chime | 0.30 |
+
+- At most 6 SFX events in any 10 seconds, none stacked on the first 150 ms of an emphasized word. `node scripts/make-assets.mjs` creates placeholder sounds; replace them with better ones whenever you have them.
+
+## 15. Failure modes and fixes
+
+| Symptom | Cause | Fix |
+|---|---|---|
+| Scene feels like a slideshow | Fewer than three motions | Add an environment loop and character idle (section 6) |
+| Text overlaps the character | Position not planned | Pick upper or lower band per scene (section 9) |
+| Text appears before or after the voice | Hardcoded frames | Use `WORDS` timestamps and anchors |
+| Every transition looks the same | Default fade reused | Follow the pair table (section 10) |
+| Everything is blurry | More than 3 blurred layers or maxBlur too high | Cap at 3, maxBlur 8-14 |
+| Cards look generic | Specificity test failed | Redesign with episode palette and motif (section 11) |
+| Characters look alike across episodes | Same proportions reused | Change ratio, hat, outfit (section 5) |
+| Audio has gaps or jumps | Voice-over split per scene | One file, one `<MasterAudio>` |
+| Watermark or text hidden by app UI | Outside safe area | Move inside `SAFE`; preview in the app |
+| Render takes very long | Blurred full-screen layers | Bake static blurs, reduce layers, preview at half scale |

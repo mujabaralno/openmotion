@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { SFX_FILES, synthesizeSfx } from './sfx.ts';
 import { artifactPath, readArtifact, writeArtifact } from './files.ts';
 import { getEpisodeBySlug } from '../episodes/repository.ts';
 import { resolveWorkspacePath } from '../workspace/paths.ts';
@@ -39,7 +40,11 @@ export function prepareComposition(slug: string): { duration: number; captionsEs
     const tokens = readArtifact(slug, '01-naskah.md').trim().split(/\s+/);
     tokens.forEach((text, i) => words.push({ text, start: i / tokens.length * metadata.duration, end: (i + 1) / tokens.length * metadata.duration }));
   }
-  const props = { durationInFrames: Math.ceil((metadata.duration + 3) * 30), fps: 30, audioDuration: metadata.duration, title: getEpisodeBySlug(slug)!.title, words };
+  const sfx = Object.fromEntries(Object.entries(SFX_FILES).map(([kind, name]) => {
+    writeArtifact(slug, name, synthesizeSfx(kind as keyof typeof SFX_FILES), 'composition-public');
+    return [kind, `episodes/${slug}/${name}`];
+  }));
+  const props = { sfx, durationInFrames: Math.ceil((metadata.duration + 3) * 30), fps: 30, audioDuration: metadata.duration, title: getEpisodeBySlug(slug)!.title, words };
   writeArtifact(slug, 'audio.mp3', fs.readFileSync(artifactPath(slug, '03-voiceover.mp3')), 'composition-public');
   writeArtifact(slug, 'timestamps.json', JSON.stringify(timing), 'composition-public');
   writeArtifact(slug, 'props.json', JSON.stringify(props, null, 2), 'composition');
@@ -55,7 +60,7 @@ function Captions(){
  const first=Math.floor(active/5)*5;
  return <div style={{position:'absolute',left:76,right:76,bottom:190,textAlign:'center',fontFamily:'Arial, sans-serif',fontWeight:700,fontSize:48,lineHeight:1.25,color:'#f5f7ff',textShadow:'0 2px 12px rgba(0,0,0,.65)',pointerEvents:'none'}}>{props.words.slice(first,first+5).map((w,i)=><span key={first+i} style={{color:first+i===active?'#ffe68a':'#f5f7ff',marginRight:10}}>{w.text}</span>)}</div>;
 }
-function Video(){return <AbsoluteFill><EpisodeVisual {...props}/><Audio src={staticFile(${JSON.stringify(`episodes/${slug}/audio.mp3`)})}/><Captions/></AbsoluteFill>}
+function Video(){return <AbsoluteFill><EpisodeVisual {...props}/><Audio src={staticFile(${JSON.stringify(`episodes/${slug}/audio.mp3`)})}/><Captions/><div style={{position:'absolute',top:96,right:76,fontFamily:'Arial, sans-serif',fontSize:26,fontWeight:600,letterSpacing:1,color:'rgba(255,255,255,.72)',textShadow:'0 1px 6px rgba(0,0,0,.6)',pointerEvents:'none'}}>Mystery Lab</div></AbsoluteFill>}
 function Root(){return <Composition id="Episode" component={Video} durationInFrames={props.durationInFrames} fps={30} width={1080} height={1920}/>}
 registerRoot(Root);
 `, 'composition');
